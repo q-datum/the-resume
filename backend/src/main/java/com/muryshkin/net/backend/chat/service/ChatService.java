@@ -23,8 +23,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Reactive service for managing chat sessions and streaming responses
- * from the OpenAI API.
+ * Reactive service responsible for managing chat sessions,
+ * streaming assistant responses, and persisting chat history.
  */
 @Service
 @RequiredArgsConstructor
@@ -61,43 +61,70 @@ public class ChatService {
     public Flux<String> streamChatResponse(String sessionId, String message) {
         AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
 
-        return sessionRepository.findById(sessionId)
-                .switchIfEmpty(sessionRepository.save(ChatSession.builder().id(sessionId).build()))
-                .flatMapMany(session ->
-                        messageRepository.save(ChatMessage.builder()
-                                        .role("user")
-                                        .content(message)
-                                        .sessionId(session.getId())
-                                        .build()
+        return getOrCreateSession(sessionId)
+                .flatMap(session -> saveUserMessage(session, message))
+                .thenMany(fetchHistory(sessionId)
+                        .collectList()
+                        .flatMapMany(history -> streamAssistantResponse(history, assistantReplyBuffer)
+                                .concatWith(saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
+                                        .thenMany(Flux.empty())
                                 )
-                                .then(
-                                        messageRepository.findBySessionIdOrderByIdAsc(session.getId()).collectList()
-                                )
-                                .flatMapMany(history ->
-                                        callOpenAiWithStreaming(history, assistantReplyBuffer)
-                                                // Once streaming finishes, save assistant message (returns Mono<Void>)
-                                                .concatWith(
-                                                        saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
-                                                                .thenMany(Flux.empty()) // Complete after saving
-                                                )
-                                )
+                        )
                 );
     }
 
     /**
-     * Calls the OpenAI API in streaming mode and extracts tokens from the response.
+     * Retrieves the chat history for a given session.
+     *
+     * @param sessionId The session identifier.
+     * @return Flux of ChatMessage objects.
      */
-    private Flux<String> callOpenAiWithStreaming(List<ChatMessage> history,
-                                                 AtomicReference<StringBuilder> assistantReplyBuffer) {
+    public Flux<ChatMessage> getChatHistory(String sessionId) {
+        return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
+    }
+
+    // ========================== Private Helper Methods ==========================
+
+    /**
+     * Gets an existing session or creates a new one.
+     */
+    private Mono<ChatSession> getOrCreateSession(String sessionId) {
+        return sessionRepository.findById(sessionId)
+                .switchIfEmpty(sessionRepository.save(ChatSession.builder().id(sessionId).build()));
+    }
+
+    /**
+     * Saves a user message in the database.
+     */
+    private Mono<ChatMessage> saveUserMessage(ChatSession session, String message) {
+        return messageRepository.save(ChatMessage.builder()
+                .role("user")
+                .content(message)
+                .sessionId(session.getId())
+                .build());
+    }
+
+    /**
+     * Fetches chat history as a reactive Flux.
+     */
+    private Flux<ChatMessage> fetchHistory(String sessionId) {
+        return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
+    }
+
+    /**
+     * Streams the assistant's response from the OpenAI API.
+     */
+    private Flux<String> streamAssistantResponse(List<ChatMessage> history,
+                                                 AtomicReference<StringBuilder> buffer) {
         String openAiMessages = buildMessages(history);
 
         String body = """
-        {
-          "model": "gpt-4o-mini",
-          "stream": true,
-          "messages": %s
-        }
-        """.formatted(openAiMessages);
+            {
+              "model": "gpt-4o-mini",
+              "stream": true,
+              "messages": %s
+            }
+            """.formatted(openAiMessages);
 
         return webClient.post()
                 .uri("/chat/completions")
@@ -108,11 +135,27 @@ public class ChatService {
                 .bodyToFlux(String.class)
                 .map(this::extractToken)
                 .filter(token -> !token.isEmpty())
-                .doOnNext(token -> assistantReplyBuffer.get().append(token));
+                .doOnNext(token -> buffer.get().append(token));
     }
 
     /**
-     * Builds the JSON message array to send to the OpenAI API.
+     * Saves the assistant's final response asynchronously.
+     */
+    private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
+        if (fullReply.isEmpty()) return Mono.empty();
+        return sessionRepository.findById(sessionId)
+                .flatMap(session ->
+                        messageRepository.save(ChatMessage.builder()
+                                .role("assistant")
+                                .content(fullReply)
+                                .sessionId(session.getId())
+                                .build())
+                )
+                .then();
+    }
+
+    /**
+     * Builds the JSON message array for OpenAI, including the master prompt and conversation history.
      */
     private String buildMessages(List<ChatMessage> history) {
         StringBuilder sb = new StringBuilder("[");
@@ -127,7 +170,7 @@ public class ChatService {
     }
 
     /**
-     * Escapes JSON-sensitive characters.
+     * Escapes special characters for JSON.
      */
     private String escapeJson(String text) {
         return text.replace("\"", "\\\"")
@@ -135,12 +178,12 @@ public class ChatService {
     }
 
     /**
-     * Extracts delta.content from OpenAI streaming JSON chunks.
+     * Extracts the token (delta.content) from OpenAI's streaming response.
      */
     private String extractToken(String chunk) {
         try {
             if (!chunk.startsWith("data:")) return "";
-            String json = chunk.substring(5).trim(); // remove "data:"
+            String json = chunk.substring(5).trim(); // Remove "data:"
             if ("[DONE]".equals(json)) return "";
             JsonNode node = objectMapper.readTree(json);
             JsonNode delta = node.at("/choices/0/delta/content");
@@ -148,30 +191,5 @@ public class ChatService {
         } catch (Exception e) {
             return "";
         }
-    }
-
-    /**
-     * Saves the assistant's final response asynchronously.
-     */
-    private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
-        if (fullReply.isEmpty()) return Mono.empty();
-
-        return sessionRepository.findById(sessionId)
-                .flatMap(session ->
-                        messageRepository.save(ChatMessage.builder()
-                                .role("assistant")
-                                .content(fullReply)
-                                .sessionId(session.getId())
-                                .build()
-                        )
-                )
-                .then();
-    }
-
-    /**
-     * Returns the chat history for the given session as a reactive stream.
-     */
-    public Flux<ChatMessage> getChatHistory(String sessionId) {
-        return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
     }
 }
