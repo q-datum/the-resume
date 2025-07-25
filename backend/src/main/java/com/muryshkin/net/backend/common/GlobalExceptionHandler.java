@@ -1,5 +1,7 @@
 package com.muryshkin.net.backend.common;
 
+import com.muryshkin.net.backend.chat.exception.ChatSessionNotFoundException;
+import com.muryshkin.net.backend.chat.exception.OpenAiServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,10 +16,22 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(ChatSessionNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSessionNotFound(ChatSessionNotFoundException ex) {
+        log.warn("Session not found: {}", ex.getMessage());
+        return buildErrorResponse("Session Not Found", ex.getMessage(), HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(OpenAiServiceException.class)
+    public ResponseEntity<Map<String, Object>> handleOpenAiServiceException(OpenAiServiceException ex) {
+        log.error("OpenAI API error: {}", ex.getMessage());
+        return buildErrorResponse("OpenAI Service Error", ex.getMessage(), HttpStatus.BAD_GATEWAY);
+    }
+
     @ExceptionHandler(WebClientResponseException.class)
     public ResponseEntity<Map<String, Object>> handleWebClientException(WebClientResponseException ex) {
-        log.error("OpenAI API error: {}", ex.getResponseBodyAsString(), ex);
-        return buildErrorResponse("OpenAI API error", ex.getMessage(), HttpStatus.BAD_GATEWAY);
+        log.error("WebClient error: {}", ex.getResponseBodyAsString(), ex);
+        return buildErrorResponse("External API error", ex.getMessage(), HttpStatus.BAD_GATEWAY);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -28,8 +42,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
-        log.error("Unexpected error occurred: {}", ex.getMessage(), ex);
-        return buildErrorResponse("Internal server error", "Something went wrong on the server", HttpStatus.INTERNAL_SERVER_ERROR);
+        log.error("Unexpected server error: {}", ex.getMessage(), ex);
+        return buildErrorResponse("Internal server error", "Something went wrong on the server.", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     private ResponseEntity<Map<String, Object>> buildErrorResponse(String error, String message, HttpStatus status) {

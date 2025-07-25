@@ -3,6 +3,7 @@ package com.muryshkin.net.backend.chat.controller;
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
 import com.muryshkin.net.backend.chat.service.ChatService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -16,6 +17,7 @@ import reactor.core.publisher.Flux;
  * </br>
  * The controller delegates all business logic to the ChatService.
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/chat")
 @CrossOrigin(origins = "*")
@@ -38,16 +40,15 @@ public class ChatController {
      * Example: GET /api/chat/stream?sessionId=abc123&message=Hello
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> streamChat(
-            @RequestParam String sessionId,
-            @RequestParam String message) {
-
+    public Flux<String> streamChat(@RequestParam String sessionId, @RequestParam String message) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("Session ID must not be empty.");
         }
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("Message must not be empty.");
         }
+
+        log.info("Received streaming request: sessionId={}, message={}", sessionId, message);
         return chatService.streamChatResponse(sessionId, message);
     }
 
@@ -64,6 +65,10 @@ public class ChatController {
      */
     @GetMapping("/history")
     public Flux<ChatMessage> getHistory(@RequestParam String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("Session ID must not be empty.");
+        }
+        log.info("Fetching chat history for sessionId={}", sessionId);
         return chatService.getChatHistory(sessionId);
     }
 }

@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
 import com.muryshkin.net.backend.chat.entity.ChatSession;
+import com.muryshkin.net.backend.chat.exception.ChatSessionNotFoundException;
+import com.muryshkin.net.backend.chat.exception.OpenAiServiceException;
 import com.muryshkin.net.backend.chat.repository.ChatMessageRepository;
 import com.muryshkin.net.backend.chat.repository.ChatSessionRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -26,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Reactive service responsible for managing chat sessions,
  * streaming assistant responses, and persisting chat history.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatService {
@@ -59,18 +63,26 @@ public class ChatService {
      * @return A Flux of tokens representing the assistant's response.
      */
     public Flux<String> streamChatResponse(String sessionId, String message) {
+        log.info("Streaming response for sessionId={}, message={}", sessionId, message);
         AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
 
         return getOrCreateSession(sessionId)
-                .flatMap(session -> saveUserMessage(session, message))
+                .doOnSuccess(session -> log.debug("Session found/created: {}", sessionId))
+                .flatMap(session -> saveUserMessage(session, message)
+                        .doOnSuccess(msg -> log.debug("Saved user message: {}", msg.getContent())))
                 .thenMany(fetchHistory(sessionId)
                         .collectList()
-                        .flatMapMany(history -> streamAssistantResponse(history, assistantReplyBuffer)
-                                .concatWith(saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
-                                        .thenMany(Flux.empty())
-                                )
-                        )
-                );
+                        .flatMapMany(history -> {
+                            log.debug("Chat history for {} contains {} messages", sessionId, history.size());
+                            return streamAssistantResponse(history, assistantReplyBuffer)
+                                    .concatWith(
+                                            saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
+                                                    .thenMany(Flux.empty())
+                                    );
+                        })
+                )
+                .doOnComplete(() -> log.info("Streaming completed for sessionId={}", sessionId))
+                .doOnError(err -> log.error("Error during streaming for sessionId={}: {}", sessionId, err.getMessage()));
     }
 
     /**
@@ -117,14 +129,13 @@ public class ChatService {
     private Flux<String> streamAssistantResponse(List<ChatMessage> history,
                                                  AtomicReference<StringBuilder> buffer) {
         String openAiMessages = buildMessages(history);
-
         String body = """
-            {
-              "model": "gpt-4o-mini",
-              "stream": true,
-              "messages": %s
-            }
-            """.formatted(openAiMessages);
+        {
+          "model": "gpt-4o-mini",
+          "stream": true,
+          "messages": %s
+        }
+        """.formatted(openAiMessages);
 
         return webClient.post()
                 .uri("/chat/completions")
@@ -133,6 +144,7 @@ public class ChatService {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
+                .onErrorMap(ex -> new OpenAiServiceException(ex.getMessage()))
                 .map(this::extractToken)
                 .filter(token -> !token.isEmpty())
                 .doOnNext(token -> buffer.get().append(token));
@@ -145,7 +157,7 @@ public class ChatService {
         if (fullReply.isEmpty()) return Mono.empty();
 
         return sessionRepository.findById(sessionId)
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("Chat session not found: " + sessionId)))
+                .switchIfEmpty(Mono.error(new ChatSessionNotFoundException(sessionId)))
                 .flatMap(session ->
                         messageRepository.save(ChatMessage.builder()
                                 .role("assistant")
