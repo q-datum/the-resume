@@ -143,7 +143,9 @@ public class ChatService {
      */
     private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
         if (fullReply.isEmpty()) return Mono.empty();
+
         return sessionRepository.findById(sessionId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Chat session not found: " + sessionId)))
                 .flatMap(session ->
                         messageRepository.save(ChatMessage.builder()
                                 .role("assistant")

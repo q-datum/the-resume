@@ -41,6 +41,13 @@ public class ChatController {
     public Flux<String> streamChat(
             @RequestParam String sessionId,
             @RequestParam String message) {
+
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("Session ID must not be empty.");
+        }
+        if (message == null || message.isBlank()) {
+            throw new IllegalArgumentException("Message must not be empty.");
+        }
         return chatService.streamChatResponse(sessionId, message);
     }
 
