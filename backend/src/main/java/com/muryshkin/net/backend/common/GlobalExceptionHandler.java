@@ -10,48 +10,52 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Instant;
-import java.util.Map;
 
+/**
+ * Centralized handler for all exceptions across controllers,
+ * producing a consistent ResponseError object.
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ChatSessionNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleSessionNotFound(ChatSessionNotFoundException ex) {
+    public ResponseEntity<ResponseError> handleSessionNotFound(ChatSessionNotFoundException ex) {
         log.warn("Session not found: {}", ex.getMessage());
         return buildErrorResponse("Session Not Found", ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(OpenAiServiceException.class)
-    public ResponseEntity<Map<String, Object>> handleOpenAiServiceException(OpenAiServiceException ex) {
+    public ResponseEntity<ResponseError> handleOpenAiServiceException(OpenAiServiceException ex) {
         log.error("OpenAI API error: {}", ex.getMessage());
         return buildErrorResponse("OpenAI Service Error", ex.getMessage(), HttpStatus.BAD_GATEWAY);
     }
 
     @ExceptionHandler(WebClientResponseException.class)
-    public ResponseEntity<Map<String, Object>> handleWebClientException(WebClientResponseException ex) {
+    public ResponseEntity<ResponseError> handleWebClientException(WebClientResponseException ex) {
         log.error("WebClient error: {}", ex.getResponseBodyAsString(), ex);
         return buildErrorResponse("External API error", ex.getMessage(), HttpStatus.BAD_GATEWAY);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
+    public ResponseEntity<ResponseError> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Validation error: {}", ex.getMessage());
         return buildErrorResponse("Validation error", ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
+    public ResponseEntity<ResponseError> handleGeneralException(Exception ex) {
         log.error("Unexpected server error: {}", ex.getMessage(), ex);
         return buildErrorResponse("Internal server error", "Something went wrong on the server.", HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    private ResponseEntity<Map<String, Object>> buildErrorResponse(String error, String message, HttpStatus status) {
-        return ResponseEntity.status(status).body(Map.of(
-                "error", error,
-                "message", message,
-                "timestamp", Instant.now().toString(),
-                "status", status.value()
-        ));
+    private ResponseEntity<ResponseError> buildErrorResponse(String error, String message, HttpStatus status) {
+        ResponseError response = ResponseError.builder()
+                .error(error)
+                .message(message)
+                .status(status.value())
+                .timestamp(Instant.now())
+                .build();
+        return ResponseEntity.status(status).body(response);
     }
 }
