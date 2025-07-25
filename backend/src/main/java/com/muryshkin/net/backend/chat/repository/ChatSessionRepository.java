@@ -1,6 +1,7 @@
 package com.muryshkin.net.backend.chat.repository;
 
 import com.muryshkin.net.backend.chat.entity.ChatSession;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 
-public interface ChatSessionRepository extends JpaRepository<ChatSession, String> {}
+public interface ChatSessionRepository extends ReactiveCrudRepository<ChatSession, String> {
+}

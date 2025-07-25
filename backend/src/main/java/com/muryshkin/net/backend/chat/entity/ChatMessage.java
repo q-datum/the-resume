@@ -1,10 +1,11 @@
 package com.muryshkin.net.backend.chat.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "chat_message")
+@Table("chat_message")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -12,13 +13,14 @@ import lombok.*;
 public class ChatMessage {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String role; // "user" or "assistant"
+    @Column("role")
+    private String role;
+
+    @Column("content")
     private String content;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id")
-    private ChatSession session;
+    @Column("session_id")
+    private String sessionId;
 }

@@ -1,11 +1,10 @@
 package com.muryshkin.net.backend.chat.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
-import java.util.List;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "chat_session")
+@Table("chat_session")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -13,9 +12,5 @@ import java.util.List;
 public class ChatSession {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
-
-    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ChatMessage> messages;
 }

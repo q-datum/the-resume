@@ -1,10 +1,9 @@
 package com.muryshkin.net.backend.chat.repository;
 
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
 
-import java.util.List;
-
-public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
-    List<ChatMessage> findBySessionIdOrderByIdAsc(String sessionId);
+public interface ChatMessageRepository extends ReactiveCrudRepository<ChatMessage, Long> {
+    Flux<ChatMessage> findBySessionIdOrderByIdAsc(String sessionId);
 }

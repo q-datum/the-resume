@@ -15,20 +15,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Service layer responsible for handling chat logic.
- *
- * This service:
- * - Streams responses from the OpenAI API.
- * - Maintains conversation history per session.
- * - Persists all messages in a PostgreSQL database.
+ * Reactive service for managing chat sessions and streaming responses
+ * from the OpenAI API.
  */
 @Service
 @RequiredArgsConstructor
@@ -56,26 +52,43 @@ public class ChatService {
     }
 
     /**
-     * Streams the assistant response from the OpenAI API.
-     * Stores both user and assistant messages in the database.
+     * Streams a response from the assistant, persisting both user and assistant messages.
      *
-     * @param sessionId user session ID.
-     * @param message   user input message.
-     * @return a Flux of tokens representing the assistant's streaming reply.
+     * @param sessionId The session identifier.
+     * @param message   The user message.
+     * @return A Flux of tokens representing the assistant's response.
      */
     public Flux<String> streamChatResponse(String sessionId, String message) {
-        ChatSession session = sessionRepository.findById(sessionId)
-                .orElseGet(() -> sessionRepository.save(ChatSession.builder().id(sessionId).build()));
+        AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
 
-        // Save user message
-        messageRepository.save(ChatMessage.builder()
-                .role("user")
-                .content(message)
-                .session(session)
-                .build());
+        return sessionRepository.findById(sessionId)
+                .switchIfEmpty(sessionRepository.save(ChatSession.builder().id(sessionId).build()))
+                .flatMapMany(session ->
+                        messageRepository.save(ChatMessage.builder()
+                                        .role("user")
+                                        .content(message)
+                                        .sessionId(session.getId())
+                                        .build()
+                                )
+                                .then(
+                                        messageRepository.findBySessionIdOrderByIdAsc(session.getId()).collectList()
+                                )
+                                .flatMapMany(history ->
+                                        callOpenAiWithStreaming(history, assistantReplyBuffer)
+                                                // Once streaming finishes, save assistant message (returns Mono<Void>)
+                                                .concatWith(
+                                                        saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
+                                                                .thenMany(Flux.empty()) // Complete after saving
+                                                )
+                                )
+                );
+    }
 
-        // Build message history for OpenAI
-        List<ChatMessage> history = messageRepository.findBySessionIdOrderByIdAsc(sessionId);
+    /**
+     * Calls the OpenAI API in streaming mode and extracts tokens from the response.
+     */
+    private Flux<String> callOpenAiWithStreaming(List<ChatMessage> history,
+                                                 AtomicReference<StringBuilder> assistantReplyBuffer) {
         String openAiMessages = buildMessages(history);
 
         String body = """
@@ -86,8 +99,6 @@ public class ChatService {
         }
         """.formatted(openAiMessages);
 
-        AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
-
         return webClient.post()
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + openAiApiKey)
@@ -97,36 +108,39 @@ public class ChatService {
                 .bodyToFlux(String.class)
                 .map(this::extractToken)
                 .filter(token -> !token.isEmpty())
-                .doOnNext(token -> assistantReplyBuffer.get().append(token))
-                .doOnComplete(() -> saveAssistantMessage(assistantReplyBuffer.get().toString(), session));
+                .doOnNext(token -> assistantReplyBuffer.get().append(token));
     }
 
     /**
-     * Builds the JSON message array for the OpenAI API.
+     * Builds the JSON message array to send to the OpenAI API.
      */
     private String buildMessages(List<ChatMessage> history) {
-        List<String> jsonMessages = new ArrayList<>();
-        jsonMessages.add(String.format("{\"role\":\"system\",\"content\":\"%s\"}", escapeJson(masterPrompt)));
+        StringBuilder sb = new StringBuilder("[");
+        sb.append(String.format("{\"role\":\"system\",\"content\":\"%s\"}", escapeJson(masterPrompt)));
         for (ChatMessage m : history) {
-            jsonMessages.add(String.format("{\"role\":\"%s\",\"content\":\"%s\"}", m.getRole(), escapeJson(m.getContent())));
+            sb.append(",");
+            sb.append(String.format("{\"role\":\"%s\",\"content\":\"%s\"}",
+                    m.getRole(), escapeJson(m.getContent())));
         }
-        return "[" + String.join(",", jsonMessages) + "]";
+        sb.append("]");
+        return sb.toString();
     }
 
     /**
-     * Escapes quotes for JSON serialization.
+     * Escapes JSON-sensitive characters.
      */
     private String escapeJson(String text) {
-        return text.replace("\"", "\\\"").replace("\n", "\\n");
+        return text.replace("\"", "\\\"")
+                .replace("\n", "\\n");
     }
 
     /**
-     * Extracts the "delta.content" token from a streaming JSON chunk.
+     * Extracts delta.content from OpenAI streaming JSON chunks.
      */
     private String extractToken(String chunk) {
         try {
             if (!chunk.startsWith("data:")) return "";
-            String json = chunk.substring(5).trim(); // Remove 'data:' prefix
+            String json = chunk.substring(5).trim(); // remove "data:"
             if ("[DONE]".equals(json)) return "";
             JsonNode node = objectMapper.readTree(json);
             JsonNode delta = node.at("/choices/0/delta/content");
@@ -137,24 +151,27 @@ public class ChatService {
     }
 
     /**
-     * Saves the assistant's full response after streaming is complete.
+     * Saves the assistant's final response asynchronously.
      */
-    private void saveAssistantMessage(String fullReply, ChatSession session) {
-        if (fullReply.isEmpty()) return;
-        messageRepository.save(ChatMessage.builder()
-                .role("assistant")
-                .content(fullReply)
-                .session(session)
-                .build());
+    private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
+        if (fullReply.isEmpty()) return Mono.empty();
+
+        return sessionRepository.findById(sessionId)
+                .flatMap(session ->
+                        messageRepository.save(ChatMessage.builder()
+                                .role("assistant")
+                                .content(fullReply)
+                                .sessionId(session.getId())
+                                .build()
+                        )
+                )
+                .then();
     }
 
     /**
-     * Retrieves chat history for a given session.
-     *
-     * @param sessionId session identifier.
-     * @return list of ChatMessage objects in chronological order.
+     * Returns the chat history for the given session as a reactive stream.
      */
-    public List<ChatMessage> getChatHistory(String sessionId) {
+    public Flux<ChatMessage> getChatHistory(String sessionId) {
         return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
     }
 }
