@@ -2,6 +2,7 @@ package com.muryshkin.net.backend.common;
 
 import com.muryshkin.net.backend.chat.exception.ChatSessionNotFoundException;
 import com.muryshkin.net.backend.chat.exception.OpenAiServiceException;
+import com.muryshkin.net.backend.security.RateLimitExceededException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +42,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ResponseError> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Validation error: {}", ex.getMessage());
         return buildErrorResponse("Validation error", ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ResponseError> handleRateLimitExceeded(RateLimitExceededException ex) {
+        log.warn("Rate limit exceeded: {}", ex.getMessage());
+        return buildErrorResponse("Rate limit exceeded", ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @ExceptionHandler(Exception.class)
