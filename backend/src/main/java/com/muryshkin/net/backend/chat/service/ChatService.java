@@ -1,5 +1,6 @@
 package com.muryshkin.net.backend.chat.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
@@ -14,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
+import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -22,7 +24,9 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -36,6 +40,7 @@ public class ChatService {
 
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
+    private final DatabaseClient databaseClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${openai.api.key}")
@@ -50,9 +55,15 @@ public class ChatService {
 
     private String masterPrompt;
 
+    /**
+     * Loads the master prompt from the configured resource file.
+     *
+     * @throws IOException if reading the master prompt fails.
+     */
     @PostConstruct
     private void loadMasterPrompt() throws IOException {
         this.masterPrompt = StreamUtils.copyToString(masterPromptResource.getInputStream(), StandardCharsets.UTF_8);
+        log.info("Master prompt loaded: {} characters", masterPrompt.length());
     }
 
     /**
@@ -63,26 +74,20 @@ public class ChatService {
      * @return A Flux of tokens representing the assistant's response.
      */
     public Flux<String> streamChatResponse(String sessionId, String message) {
-        log.info("Streaming response for sessionId={}, message={}", sessionId, message);
+        log.info("Streaming chat response: sessionId={}, message={}", sessionId, message);
         AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
 
         return getOrCreateSession(sessionId)
-                .doOnSuccess(session -> log.debug("Session found/created: {}", sessionId))
-                .flatMap(session -> saveUserMessage(session, message)
-                        .doOnSuccess(msg -> log.debug("Saved user message: {}", msg.getContent())))
+                .flatMap(session -> saveUserMessage(session, message))
                 .thenMany(fetchHistory(sessionId)
                         .collectList()
-                        .flatMapMany(history -> {
-                            log.debug("Chat history for {} contains {} messages", sessionId, history.size());
-                            return streamAssistantResponse(history, assistantReplyBuffer)
-                                    .concatWith(
-                                            saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
-                                                    .thenMany(Flux.empty())
-                                    );
-                        })
+                        .flatMapMany(history -> streamAssistantResponse(history, assistantReplyBuffer)
+                                .concatWith(saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
+                                        .thenMany(Flux.empty()))
+                        )
                 )
-                .doOnComplete(() -> log.info("Streaming completed for sessionId={}", sessionId))
-                .doOnError(err -> log.error("Error during streaming for sessionId={}: {}", sessionId, err.getMessage()));
+                .doOnComplete(() -> log.info("Final assistant reply for sessionId={}: {}", sessionId, assistantReplyBuffer.get()))
+                .doOnError(err -> log.error("Error during chat for sessionId={}: {}", sessionId, err.getMessage()));
     }
 
     /**
@@ -99,14 +104,35 @@ public class ChatService {
 
     /**
      * Gets an existing session or creates a new one.
+     *
+     * @param sessionId The session identifier.
+     * @return A Mono of ChatSession.
      */
     private Mono<ChatSession> getOrCreateSession(String sessionId) {
         return sessionRepository.findById(sessionId)
-                .switchIfEmpty(sessionRepository.save(ChatSession.builder().id(sessionId).build()));
+                .switchIfEmpty(insertSession(sessionId));
+    }
+
+    /**
+     * Inserts a new chat session into the database.
+     *
+     * @param sessionId The session identifier.
+     * @return A Mono of ChatSession.
+     */
+    private Mono<ChatSession> insertSession(String sessionId) {
+        return databaseClient.sql("INSERT INTO chat_session (id) VALUES (:id)")
+                .bind("id", sessionId)
+                .fetch()
+                .rowsUpdated()
+                .thenReturn(new ChatSession(sessionId));
     }
 
     /**
      * Saves a user message in the database.
+     *
+     * @param session The ChatSession.
+     * @param message The user message.
+     * @return A Mono of ChatMessage.
      */
     private Mono<ChatMessage> saveUserMessage(ChatSession session, String message) {
         return messageRepository.save(ChatMessage.builder()
@@ -118,6 +144,9 @@ public class ChatService {
 
     /**
      * Fetches chat history as a reactive Flux.
+     *
+     * @param sessionId The session identifier.
+     * @return Flux of ChatMessage objects.
      */
     private Flux<ChatMessage> fetchHistory(String sessionId) {
         return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
@@ -125,17 +154,14 @@ public class ChatService {
 
     /**
      * Streams the assistant's response from the OpenAI API.
+     *
+     * @param history The chat history.
+     * @param buffer  The buffer to accumulate the assistant's response.
+     * @return A Flux of response tokens.
      */
     private Flux<String> streamAssistantResponse(List<ChatMessage> history,
                                                  AtomicReference<StringBuilder> buffer) {
-        String openAiMessages = buildMessages(history);
-        String body = """
-        {
-          "model": "gpt-4o-mini",
-          "stream": true,
-          "messages": %s
-        }
-        """.formatted(openAiMessages);
+        String body = buildRequestBody(history);
 
         return webClient.post()
                 .uri("/chat/completions")
@@ -152,6 +178,10 @@ public class ChatService {
 
     /**
      * Saves the assistant's final response asynchronously.
+     *
+     * @param sessionId The session identifier.
+     * @param fullReply The assistant's full response.
+     * @return A Mono signaling completion.
      */
     private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
         if (fullReply.isEmpty()) return Mono.empty();
@@ -170,40 +200,44 @@ public class ChatService {
 
     /**
      * Builds the JSON message array for OpenAI, including the master prompt and conversation history.
+     *
+     * @param history The chat history.
+     * @return A JSON string representing the request body.
      */
-    private String buildMessages(List<ChatMessage> history) {
-        StringBuilder sb = new StringBuilder("[");
-        sb.append(String.format("{\"role\":\"system\",\"content\":\"%s\"}", escapeJson(masterPrompt)));
-        for (ChatMessage m : history) {
-            sb.append(",");
-            sb.append(String.format("{\"role\":\"%s\",\"content\":\"%s\"}",
-                    m.getRole(), escapeJson(m.getContent())));
+    private String buildRequestBody(List<ChatMessage> history) {
+        try {
+            List<Map<String, String>> msgs = new ArrayList<>();
+            msgs.add(Map.of("role", "system", "content", masterPrompt));
+            history.forEach(m -> msgs.add(Map.of("role", m.getRole(), "content", m.getContent())));
+            return objectMapper.writeValueAsString(Map.of(
+                    "model", "gpt-4o-mini",
+                    "stream", true,
+                    "messages", msgs
+            ));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize messages to JSON", e);
         }
-        sb.append("]");
-        return sb.toString();
-    }
-
-    /**
-     * Escapes special characters for JSON.
-     */
-    private String escapeJson(String text) {
-        return text.replace("\"", "\\\"")
-                .replace("\n", "\\n");
     }
 
     /**
      * Extracts the token (delta.content) from OpenAI's streaming response.
+     *
+     * @param chunk The raw response chunk.
+     * @return The extracted token or an empty string.
      */
     private String extractToken(String chunk) {
         try {
-            if (!chunk.startsWith("data:")) return "";
-            String json = chunk.substring(5).trim(); // Remove "data:"
+            // Some APIs might include "data:" prefixes, remove if present
+            String json = chunk.startsWith("data:") ? chunk.substring(5).trim() : chunk.trim();
             if ("[DONE]".equals(json)) return "";
+
             JsonNode node = objectMapper.readTree(json);
             JsonNode delta = node.at("/choices/0/delta/content");
             return delta.isMissingNode() ? "" : delta.asText();
         } catch (Exception e) {
+            log.warn("Failed to parse chunk: {}", chunk, e);
             return "";
         }
     }
+
 }
