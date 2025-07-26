@@ -4,6 +4,7 @@ import com.muryshkin.net.backend.chat.entity.ChatMessage;
 import com.muryshkin.net.backend.chat.service.ChatService;
 import com.muryshkin.net.backend.chat.service.SessionService;
 import com.muryshkin.net.backend.security.RateLimitService;
+import com.muryshkin.net.backend.security.RecaptchaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -22,7 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * - Retrieving chat history for a given user session.
  * </br>
  * The controller delegates all business logic to the ChatService,
- * SessionService, and RateLimitService.
+ * SessionService, RateLimitService, and RecaptchaService.
  */
 @Slf4j
 @RestController
@@ -34,6 +35,7 @@ public class ChatController {
     private final ChatService chatService;
     private final SessionService sessionService;
     private final RateLimitService rateLimitService;
+    private final RecaptchaService recaptchaService;
 
     /**
      * Creates a new chat session and returns the session ID.
@@ -44,12 +46,24 @@ public class ChatController {
      * Example: POST /api/chat/session
      */
     @PostMapping("/session")
-    public Mono<String> createSession(HttpServletRequest request) {
+    public Mono<String> createSession(
+            @RequestParam String recaptchaToken,
+            HttpServletRequest request) {
+
+        validateArgument("recaptchaToken", recaptchaToken);
         String clientIp = request.getRemoteAddr();
         rateLimitService.checkSessionLimit(clientIp);
 
         log.info("Creating new session for IP={}", clientIp);
-        return sessionService.createSession(clientIp);
+
+        return recaptchaService.verifyToken(recaptchaToken)
+                .flatMap(valid -> {
+                    if (!valid) {
+                        log.warn("Invalid reCAPTCHA token for IP={}", clientIp);
+                        return Mono.error(new SecurityException("Invalid reCAPTCHA verification."));
+                    }
+                    return sessionService.createSession(clientIp);
+                });
     }
 
     /**
@@ -61,42 +75,64 @@ public class ChatController {
      *
      * @param sessionId unique identifier of the user session.
      * @param message   the user's message or query.
+     * @param recaptchaToken Google reCAPTCHA token for bot protection.
      * @return a Flux emitting tokens of the assistant's response as they arrive.
      * <p></p>
-     * Example: GET /api/chat/stream?sessionId=abc123&message=Hello
+     * Example: GET /api/chat/stream?sessionId=abc123&message=Hello&recaptchaToken=xyz
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamChat(
             @RequestParam String sessionId,
             @RequestParam String message,
+            @RequestParam String recaptchaToken,
             HttpServletRequest request) {
 
         validateArgument("sessionId", sessionId);
         validateArgument("message", message);
+        validateArgument("recaptchaToken", recaptchaToken);
 
         String clientIp = request.getRemoteAddr();
         rateLimitService.checkMessageLimit(clientIp);
 
         log.info("Received streaming request: sessionId={}, message={}, IP={}", sessionId, message, clientIp);
 
-        return sessionService.validateSession(sessionId, clientIp)
-                .thenMany(chatService.streamChatResponse(sessionId, message));
+        return recaptchaService.verifyToken(recaptchaToken)
+                .flatMapMany(valid -> {
+                    if (!valid) {
+                        log.warn("Invalid reCAPTCHA token for IP={}", clientIp);
+                        return Flux.error(new SecurityException("Invalid reCAPTCHA verification."));
+                    }
+                    return sessionService.validateSession(sessionId, clientIp)
+                            .thenMany(chatService.streamChatResponse(sessionId, message));
+                });
     }
 
     /**
      * Retrieves the chat history for a given session.
      * <p></p>
-     * Example: GET /api/chat/history?sessionId=abc123
+     * Example: GET /api/chat/history?sessionId=abc123&recaptchaToken=xyz
      */
     @GetMapping("/history")
-    public Flux<ChatMessage> getHistory(@RequestParam String sessionId, HttpServletRequest request) {
+    public Flux<ChatMessage> getHistory(
+            @RequestParam String sessionId,
+            @RequestParam String recaptchaToken,
+            HttpServletRequest request) {
+
         validateArgument("sessionId", sessionId);
+        validateArgument("recaptchaToken", recaptchaToken);
 
         String clientIp = request.getRemoteAddr();
         log.info("Fetching chat history for sessionId={} from IP={}", sessionId, clientIp);
 
-        return sessionService.validateSession(sessionId, clientIp)
-                .thenMany(chatService.getChatHistory(sessionId));
+        return recaptchaService.verifyToken(recaptchaToken)
+                .flatMapMany(valid -> {
+                    if (!valid) {
+                        log.warn("Invalid reCAPTCHA token for IP={}", clientIp);
+                        return Flux.error(new SecurityException("Invalid reCAPTCHA verification."));
+                    }
+                    return sessionService.validateSession(sessionId, clientIp)
+                            .thenMany(chatService.getChatHistory(sessionId));
+                });
     }
 
     /**
