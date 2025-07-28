@@ -27,6 +27,11 @@ public class IPBlockingService {
      * @param ip the client's IP address
      */
     public void recordFailedAttempt(String ip) {
+        if (ip == null || ip.isBlank()) {
+            log.warn("Attempted to record failed attempt with null or blank IP. Ignoring.");
+            return;
+        }
+
         failedAttempts.compute(ip, (key, attempt) -> {
             if (attempt == null || attempt.isExpired()) {
                 return new FailedAttempt(1);
@@ -35,7 +40,9 @@ public class IPBlockingService {
                 return attempt;
             }
         });
-        log.warn("Failed attempt recorded for IP: {}. Current count: {}", ip, failedAttempts.get(ip).count);
+
+        FailedAttempt attempt = failedAttempts.get(ip);
+        log.warn("Failed attempt recorded for IP: {}. Current count: {}", ip, attempt.count);
     }
 
     /**
@@ -45,6 +52,10 @@ public class IPBlockingService {
      * @return true if blocked, false otherwise
      */
     public boolean isBlocked(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+
         FailedAttempt attempt = failedAttempts.get(ip);
         if (attempt == null || attempt.isExpired()) {
             return false;
@@ -52,6 +63,9 @@ public class IPBlockingService {
         return attempt.count >= MAX_FAILED_ATTEMPTS;
     }
 
+    /**
+     * Represents a single failed attempt tracking entry.
+     */
     private static class FailedAttempt {
         private int count;
         private final Instant firstAttempt;
