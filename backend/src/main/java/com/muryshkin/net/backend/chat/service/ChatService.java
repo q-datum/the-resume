@@ -4,18 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
-import com.muryshkin.net.backend.chat.entity.ChatSession;
-import com.muryshkin.net.backend.chat.exception.ChatSessionNotFoundException;
 import com.muryshkin.net.backend.chat.exception.OpenAiServiceException;
 import com.muryshkin.net.backend.chat.repository.ChatMessageRepository;
-import com.muryshkin.net.backend.chat.repository.ChatSessionRepository;
+import com.muryshkin.net.backend.exception.BadRequestException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
-import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -30,7 +27,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Reactive service responsible for managing chat sessions,
+ * Reactive service responsible for managing chat messages,
  * streaming assistant responses, and persisting chat history.
  */
 @Slf4j
@@ -38,9 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class ChatService {
 
-    private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
-    private final DatabaseClient databaseClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${openai.api.key}")
@@ -74,11 +69,18 @@ public class ChatService {
      * @return A Flux of tokens representing the assistant's response.
      */
     public Flux<String> streamChatResponse(String sessionId, String message) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new BadRequestException("Session ID cannot be null or blank.");
+        }
+        if (message == null || message.isBlank()) {
+            throw new BadRequestException("Message cannot be null or blank.");
+        }
+
         log.info("Streaming chat response: sessionId={}, message={}", sessionId, message);
         AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
 
-        return getOrCreateSession(sessionId)
-                .flatMap(session -> saveUserMessage(session, message))
+        // Save user message, then stream assistant response
+        return saveUserMessage(sessionId, message)
                 .thenMany(fetchHistory(sessionId)
                         .collectList()
                         .flatMapMany(history -> streamAssistantResponse(history, assistantReplyBuffer)
@@ -87,7 +89,7 @@ public class ChatService {
                         )
                 )
                 .doOnComplete(() -> log.info("Final assistant reply for sessionId={}: {}", sessionId, assistantReplyBuffer.get()))
-                .doOnError(err -> log.error("Error during chat for sessionId={}: {}", sessionId, err.getMessage()));
+                .doOnError(err -> log.error("Error during chat for sessionId={}: {}", sessionId, err.getMessage(), err));
     }
 
     /**
@@ -97,49 +99,31 @@ public class ChatService {
      * @return Flux of ChatMessage objects.
      */
     public Flux<ChatMessage> getChatHistory(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new BadRequestException("Session ID cannot be null or blank.");
+        }
+        log.info("Fetching chat history for sessionId={}", sessionId);
         return messageRepository.findBySessionIdOrderByIdAsc(sessionId);
     }
 
     // ========================== Private Helper Methods ==========================
 
     /**
-     * Gets an existing session or creates a new one.
-     *
-     * @param sessionId The session identifier.
-     * @return A Mono of ChatSession.
-     */
-    private Mono<ChatSession> getOrCreateSession(String sessionId) {
-        return sessionRepository.findById(sessionId)
-                .switchIfEmpty(insertSession(sessionId));
-    }
-
-    /**
-     * Inserts a new chat session into the database.
-     *
-     * @param sessionId The session identifier.
-     * @return A Mono of ChatSession.
-     */
-    private Mono<ChatSession> insertSession(String sessionId) {
-        return databaseClient.sql("INSERT INTO chat_session (id) VALUES (:id)")
-                .bind("id", sessionId)
-                .fetch()
-                .rowsUpdated()
-                .thenReturn(new ChatSession(sessionId));
-    }
-
-    /**
      * Saves a user message in the database.
      *
-     * @param session The ChatSession.
-     * @param message The user message.
+     * @param sessionId The session ID.
+     * @param message   The user message.
      * @return A Mono of ChatMessage.
      */
-    private Mono<ChatMessage> saveUserMessage(ChatSession session, String message) {
-        return messageRepository.save(ChatMessage.builder()
+    private Mono<ChatMessage> saveUserMessage(String sessionId, String message) {
+        ChatMessage chatMessage = ChatMessage.builder()
                 .role("user")
                 .content(message)
-                .sessionId(session.getId())
-                .build());
+                .sessionId(sessionId)
+                .build();
+
+        log.debug("Saving user message for sessionId={}", sessionId);
+        return messageRepository.save(chatMessage);
     }
 
     /**
@@ -162,6 +146,7 @@ public class ChatService {
     private Flux<String> streamAssistantResponse(List<ChatMessage> history,
                                                  AtomicReference<StringBuilder> buffer) {
         String body = buildRequestBody(history);
+        log.debug("Sending request to OpenAI API with {} messages.", history.size());
 
         return webClient.post()
                 .uri("/chat/completions")
@@ -170,7 +155,10 @@ public class ChatService {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
-                .onErrorMap(ex -> new OpenAiServiceException(ex.getMessage()))
+                .onErrorMap(ex -> {
+                    log.error("Error from OpenAI API: {}", ex.getMessage(), ex);
+                    return new OpenAiServiceException("OpenAI API call failed: " + ex.getMessage());
+                })
                 .map(this::extractToken)
                 .filter(token -> !token.isEmpty())
                 .doOnNext(token -> buffer.get().append(token));
@@ -184,18 +172,16 @@ public class ChatService {
      * @return A Mono signaling completion.
      */
     private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
-        if (fullReply.isEmpty()) return Mono.empty();
+        if (fullReply == null || fullReply.isEmpty()) return Mono.empty();
 
-        return sessionRepository.findById(sessionId)
-                .switchIfEmpty(Mono.error(new ChatSessionNotFoundException(sessionId)))
-                .flatMap(session ->
-                        messageRepository.save(ChatMessage.builder()
-                                .role("assistant")
-                                .content(fullReply)
-                                .sessionId(session.getId())
-                                .build())
-                )
-                .then();
+        ChatMessage assistantMessage = ChatMessage.builder()
+                .role("assistant")
+                .content(fullReply)
+                .sessionId(sessionId)
+                .build();
+
+        log.debug("Saving assistant response for sessionId={}", sessionId);
+        return messageRepository.save(assistantMessage).then();
     }
 
     /**
@@ -209,13 +195,15 @@ public class ChatService {
             List<Map<String, String>> msgs = new ArrayList<>();
             msgs.add(Map.of("role", "system", "content", masterPrompt));
             history.forEach(m -> msgs.add(Map.of("role", m.getRole(), "content", m.getContent())));
+
             return objectMapper.writeValueAsString(Map.of(
                     "model", "gpt-4o-mini",
                     "stream", true,
                     "messages", msgs
             ));
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize messages to JSON", e);
+            log.error("Failed to build request body", e);
+            throw new OpenAiServiceException("Failed to serialize messages for OpenAI request.");
         }
     }
 
@@ -227,7 +215,6 @@ public class ChatService {
      */
     private String extractToken(String chunk) {
         try {
-            // Some APIs might include "data:" prefixes, remove if present
             String json = chunk.startsWith("data:") ? chunk.substring(5).trim() : chunk.trim();
             if ("[DONE]".equals(json)) return "";
 
@@ -239,5 +226,4 @@ public class ChatService {
             return "";
         }
     }
-
 }
