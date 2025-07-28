@@ -2,7 +2,7 @@ package com.muryshkin.net.backend.common;
 
 import com.muryshkin.net.backend.chat.exception.ChatSessionNotFoundException;
 import com.muryshkin.net.backend.chat.exception.OpenAiServiceException;
-import com.muryshkin.net.backend.security.RateLimitExceededException;
+import com.muryshkin.net.backend.exception.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +48,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ResponseError> handleRateLimitExceeded(RateLimitExceededException ex) {
         log.warn("Rate limit exceeded: {}", ex.getMessage());
         return buildErrorResponse("Rate limit exceeded", ex.getMessage(), HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<ResponseError> handleBadRequest(BadRequestException ex) {
+        log.warn("Bad request: {}", ex.getMessage());
+        return buildErrorResponse("Bad Request", ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<ResponseError> handleInvalidToken(InvalidTokenException ex) {
+        log.warn("Invalid token: {}", ex.getMessage());
+        return buildErrorResponse("Invalid Token", ex.getMessage(), HttpStatus.UNAUTHORIZED);
+    }
+
+    @ExceptionHandler(RecaptchaVerificationException.class)
+    public ResponseEntity<ResponseError> handleRecaptchaFailure(RecaptchaVerificationException ex) {
+        log.warn("reCAPTCHA verification failed: {}", ex.getMessage());
+        return buildErrorResponse("reCAPTCHA Verification Failed", ex.getMessage(), HttpStatus.FORBIDDEN);
     }
 
     @ExceptionHandler(Exception.class)

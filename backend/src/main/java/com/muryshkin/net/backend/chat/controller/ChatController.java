@@ -2,8 +2,12 @@ package com.muryshkin.net.backend.chat.controller;
 
 import com.muryshkin.net.backend.chat.entity.ChatMessage;
 import com.muryshkin.net.backend.chat.service.ChatService;
-import com.muryshkin.net.backend.chat.service.SessionService;
+import com.muryshkin.net.backend.exception.BadRequestException;
+import com.muryshkin.net.backend.exception.InvalidTokenException;
+import com.muryshkin.net.backend.exception.RecaptchaVerificationException;
+import com.muryshkin.net.backend.security.JwtTokenService;
 import com.muryshkin.net.backend.security.RateLimitService;
+import com.muryshkin.net.backend.security.RecaptchaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -12,18 +16,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
+import java.util.UUID;
 
-/**
- * REST controller responsible for handling chat-related requests.
- * </br>
- * This controller exposes endpoints for:
- * - Creating new chat sessions.
- * - Streaming chat responses from the ChatGPT API.
- * - Retrieving chat history for a given user session.
- * </br>
- * The controller delegates all business logic to the ChatService,
- * SessionService, and RateLimitService.
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/chat")
@@ -32,82 +27,101 @@ import jakarta.servlet.http.HttpServletRequest;
 public class ChatController {
 
     private final ChatService chatService;
-    private final SessionService sessionService;
     private final RateLimitService rateLimitService;
+    private final JwtTokenService jwtTokenService;
+    private final RecaptchaService recaptchaService;
 
-    /**
-     * Creates a new chat session and returns the session ID.
-     * <p>
-     * This endpoint applies rate limiting to prevent abuse
-     * (maximum 5 sessions per minute per IP).
-     * </p>
-     * Example: POST /api/chat/session
-     */
+    /** Create session with reCAPTCHA verification */
     @PostMapping("/session")
-    public Mono<String> createSession(HttpServletRequest request) {
+    public Mono<Map<String, String>> createSession(
+            @RequestParam("recaptchaToken") String recaptchaToken,
+            HttpServletRequest request) {
+
+        if (recaptchaToken == null || recaptchaToken.isBlank()) {
+            throw new BadRequestException("Missing reCAPTCHA token.");
+        }
+
         String clientIp = request.getRemoteAddr();
         rateLimitService.checkSessionLimit(clientIp);
 
-        log.info("Creating new session for IP={}", clientIp);
-        return sessionService.createSession(clientIp);
+        return recaptchaService.verifyToken(recaptchaToken)
+                .flatMap(valid -> {
+                    if (!valid) {
+                        throw new RecaptchaVerificationException("reCAPTCHA verification failed.");
+                    }
+                    String sessionId = UUID.randomUUID().toString();
+                    String jwt = jwtTokenService.generateToken(sessionId);
+                    log.info("Issued new session for IP={}, sessionId={}", clientIp, sessionId);
+                    return Mono.just(Map.of("sessionId", sessionId, "token", jwt));
+                });
     }
 
-    /**
-     * <h3>Streams chat responses from the backend to the client in real-time.</h3>
-     * <p>
-     * This endpoint connects to the OpenAI API in streaming mode, returning
-     * server-sent events (SSE) as tokens are generated.
-     * </p>
-     *
-     * @param sessionId unique identifier of the user session.
-     * @param message   the user's message or query.
-     * @return a Flux emitting tokens of the assistant's response as they arrive.
-     * <p></p>
-     * Example: GET /api/chat/stream?sessionId=abc123&message=Hello
-     */
+    /** Renew token with reCAPTCHA and rate limit */
+    @PostMapping("/renew")
+    public Mono<Map<String, String>> renewToken(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam("recaptchaToken") String recaptchaToken,
+            HttpServletRequest request) {
+
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new InvalidTokenException("Missing or invalid Authorization header.");
+        }
+        if (recaptchaToken == null || recaptchaToken.isBlank()) {
+            throw new BadRequestException("Missing reCAPTCHA token.");
+        }
+
+        String token = authorization.substring(7);
+        String clientIp = request.getRemoteAddr();
+        rateLimitService.checkRenewLimit(clientIp);
+
+        return recaptchaService.verifyToken(recaptchaToken)
+                .flatMap(valid -> {
+                    if (!valid) {
+                        throw new RecaptchaVerificationException("reCAPTCHA verification failed.");
+                    }
+                    String newToken = jwtTokenService.renewToken(token);
+                    log.info("Token renewed for IP={}", clientIp);
+                    return Mono.just(Map.of("token", newToken));
+                });
+    }
+
+    /** Stream chat response */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamChat(
-            @RequestParam String sessionId,
+            @RequestHeader("Authorization") String authorization,
             @RequestParam String message,
             HttpServletRequest request) {
 
-        validateArgument("sessionId", sessionId);
-        validateArgument("message", message);
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new InvalidTokenException("Missing or invalid Authorization header.");
+        }
+        if (message == null || message.isBlank()) {
+            throw new BadRequestException("Message cannot be null or blank.");
+        }
+
+        String token = authorization.substring(7);
+        String sessionId = jwtTokenService.validateAndGetSessionId(token);
 
         String clientIp = request.getRemoteAddr();
         rateLimitService.checkMessageLimit(clientIp);
 
-        log.info("Received streaming request: sessionId={}, message={}, IP={}", sessionId, message, clientIp);
-
-        return sessionService.validateSession(sessionId, clientIp)
-                .thenMany(chatService.streamChatResponse(sessionId, message));
+        log.info("Streaming chat response for sessionId={}, IP={}", sessionId, clientIp);
+        return chatService.streamChatResponse(sessionId, message);
     }
 
-    /**
-     * Retrieves the chat history for a given session.
-     * <p></p>
-     * Example: GET /api/chat/history?sessionId=abc123
-     */
+    /** Retrieve chat history */
     @GetMapping("/history")
-    public Flux<ChatMessage> getHistory(@RequestParam String sessionId, HttpServletRequest request) {
-        validateArgument("sessionId", sessionId);
+    public Flux<ChatMessage> getHistory(
+            @RequestHeader("Authorization") String authorization) {
 
-        String clientIp = request.getRemoteAddr();
-        log.info("Fetching chat history for sessionId={} from IP={}", sessionId, clientIp);
-
-        return sessionService.validateSession(sessionId, clientIp)
-                .thenMany(chatService.getChatHistory(sessionId));
-    }
-
-    /**
-     * Utility method to validate arguments for null or empty values.
-     *
-     * @param name  the argument name (for logging).
-     * @param value the argument value to validate.
-     */
-    private void validateArgument(String name, String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be null or blank.");
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new InvalidTokenException("Missing or invalid Authorization header.");
         }
+
+        String token = authorization.substring(7);
+        String sessionId = jwtTokenService.validateAndGetSessionId(token);
+
+        log.info("Fetching chat history for sessionId={}", sessionId);
+        return chatService.getChatHistory(sessionId);
     }
 }

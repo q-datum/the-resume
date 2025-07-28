@@ -1,4 +1,4 @@
-package com.muryshkin.net.backend.security;
+package com.muryshkin.net.backend.exception;
 
 /**
  * Exception thrown when an IP exceeds its rate limit.
