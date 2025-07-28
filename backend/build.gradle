@@ -37,6 +37,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation "io.r2dbc:r2dbc-h2"
+    testImplementation "com.h2database:h2"
 }
 
 

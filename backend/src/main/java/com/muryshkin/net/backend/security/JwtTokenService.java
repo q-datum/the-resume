@@ -34,6 +34,7 @@ public class JwtTokenService {
         Date expiry = new Date(now.getTime() + expirationMillis);
         return Jwts.builder()
                 .setSubject(sessionId)
+                .setId(java.util.UUID.randomUUID().toString())
                 .setIssuedAt(now)
                 .setExpiration(expiry)
                 .signWith(key, SignatureAlgorithm.HS256)
@@ -73,7 +74,7 @@ public class JwtTokenService {
             throw new InvalidTokenException("Unsupported JWT token");
         } catch (MalformedJwtException e) {
             log.warn("Malformed JWT token: {}", e.getMessage());
-            throw new InvalidTokenException("Malformed JWT token");
+            throw new InvalidTokenException("Invalid JWT token");
         } catch (io.jsonwebtoken.security.SecurityException e) {
             log.warn("Invalid JWT signature: {}", e.getMessage());
             throw new InvalidTokenException("Invalid JWT signature");
