@@ -1,5 +1,6 @@
 package com.muryshkin.net.backend.security;
 
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.when;
 /**
  * Utility class to create mock WebClient instances for testing.
  */
+@TestPropertySource(locations = "classpath:application-test.properties")
 public class WebClientTestUtils {
 
     /**

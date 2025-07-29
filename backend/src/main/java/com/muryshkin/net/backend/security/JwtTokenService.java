@@ -17,6 +17,9 @@ public class JwtTokenService {
     private final Key key;
     private final long expirationMillis;
 
+    @Value("${jwt.clock-skew-seconds:30}")
+    private long clockSkewSeconds;
+
     public JwtTokenService(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration}") long expirationMillis) {
@@ -63,6 +66,7 @@ public class JwtTokenService {
         try {
             return Jwts.parserBuilder()
                     .setSigningKey(key)
+                    .setAllowedClockSkewSeconds(clockSkewSeconds)
                     .build()
                     .parseClaimsJws(token)
                     .getBody();

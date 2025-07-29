@@ -143,8 +143,8 @@ public class ChatService {
      * @param buffer  The buffer to accumulate the assistant's response.
      * @return A Flux of response tokens.
      */
-    private Flux<String> streamAssistantResponse(List<ChatMessage> history,
-                                                 AtomicReference<StringBuilder> buffer) {
+    Flux<String> streamAssistantResponse(List<ChatMessage> history,
+                                         AtomicReference<StringBuilder> buffer) {
         String body = buildRequestBody(history);
         log.debug("Sending request to OpenAI API with {} messages.", history.size());
 
@@ -171,7 +171,7 @@ public class ChatService {
      * @param fullReply The assistant's full response.
      * @return A Mono signaling completion.
      */
-    private Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
+    Mono<Void> saveAssistantMessageAsync(String sessionId, String fullReply) {
         if (fullReply == null || fullReply.isEmpty()) return Mono.empty();
 
         ChatMessage assistantMessage = ChatMessage.builder()
@@ -190,7 +190,7 @@ public class ChatService {
      * @param history The chat history.
      * @return A JSON string representing the request body.
      */
-    private String buildRequestBody(List<ChatMessage> history) {
+    String buildRequestBody(List<ChatMessage> history) {
         try {
             List<Map<String, String>> msgs = new ArrayList<>();
             msgs.add(Map.of("role", "system", "content", masterPrompt));
@@ -213,7 +213,7 @@ public class ChatService {
      * @param chunk The raw response chunk.
      * @return The extracted token or an empty string.
      */
-    private String extractToken(String chunk) {
+    String extractToken(String chunk) {
         try {
             String json = chunk.startsWith("data:") ? chunk.substring(5).trim() : chunk.trim();
             if ("[DONE]".equals(json)) return "";

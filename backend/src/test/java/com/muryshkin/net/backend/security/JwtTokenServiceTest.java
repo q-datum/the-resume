@@ -4,9 +4,11 @@ import com.muryshkin.net.backend.exception.InvalidTokenException;
 import io.jsonwebtoken.security.WeakKeyException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.*;
 
+@TestPropertySource(locations = "classpath:application-test.properties")
 class JwtTokenServiceTest {
 
     private JwtTokenService jwtTokenService;

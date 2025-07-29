@@ -2,12 +2,14 @@ package com.muryshkin.net.backend.security;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@TestPropertySource(locations = "classpath:application-test.properties")
 class RecaptchaServiceTest {
 
     private RecaptchaService createServiceWithResponse(String responseJson, HttpStatus status) {
