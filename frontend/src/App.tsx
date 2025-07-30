@@ -1,12 +1,9 @@
-import { Button, HStack } from "@chakra-ui/react"
+import {MainLayout} from "@/layout/MainLayout.tsx";
 
 function App() {
 
     return (
-        <HStack>
-            <Button>Click me</Button>
-            <Button>Click me</Button>
-        </HStack>
+        <MainLayout children={null}/>
     )
 }
 
