@@ -1,17 +1,13 @@
-// src/layout/MainLayout.tsx
-import type { ReactNode } from 'react';
 import { Box, Flex, Container } from '@chakra-ui/react';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import {Outlet} from "react-router-dom";
+import {navLinks} from "@/layout/navLinks.ts";
 
-type MainLayoutProps = {
-    children: ReactNode;
-};
-
-export const MainLayout = ({ children }: MainLayoutProps) => {
+export const MainLayout = () => {
     return (
         <Flex direction="column" minH="100vh">
-            <Header />
+            <Header navButtonLinks={navLinks}/>
 
             <Box as="main" flex="1">
                 <Container
@@ -19,7 +15,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
                     px={{ base: 4, md: 6, lg: 8 }}
                     py={{ base: 4, md: 6 }}
                 >
-                    {children}
+                    <Outlet />
                 </Container>
             </Box>
 
