@@ -1,3 +1,3 @@
 export const ChatPage = () => {
-    return <></>;
+    return <>Chat</>;
 }

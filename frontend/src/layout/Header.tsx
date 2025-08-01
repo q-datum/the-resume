@@ -140,7 +140,7 @@ type HeaderProps = {
 export const Header = ({navButtonLinks}: HeaderProps) => {
 
     return (
-        <Box borderBottom={"1px solid"} borderColor={'gray.800'} paddingTop={'4'} paddingBottom={'3'}>
+        <Box borderBottom={"1px solid"} borderColor="border" paddingTop={4} paddingBottom={3}>
             <Container>
                 <Flex justify="space-between">
                     <Heading fontWeight="bold">Alexander Muryshkin</Heading>
