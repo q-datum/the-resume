@@ -1,21 +1,16 @@
-# Use official Gradle image with JDK 17
-FROM gradle:8.5-jdk17 AS dev
+# Gradle + JDK 17
+FROM gradle:8.5-jdk17
 
-# Set working directory
 WORKDIR /app
 
-# Copy Gradle configuration files first to leverage caching
-COPY build.gradle settings.gradle gradlew* ./
+# Prime caches: only Gradle wrapper + build scripts first
+COPY build.gradle settings.gradle gradlew gradlew.bat ./
 COPY gradle ./gradle
 
-# Pre-download dependencies (ignore tests and allow empty src)
-RUN ./gradlew build --no-daemon -x test || true
+# Warm up dependency cache (ignore failure if no sources yet)
+RUN ./gradlew build -x test || true
 
-# Copy all project files (source code)
-COPY . .
-
-# Expose backend port
+# The source tree will be bind-mounted at runtime.
 EXPOSE 8080
 
-# Run Spring Boot in development mode
-CMD ["./gradlew", "bootRun", "--no-daemon"]
+# Actual run command is set in compose (continuous mode)

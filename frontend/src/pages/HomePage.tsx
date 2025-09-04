@@ -1,5 +1,6 @@
 import {HeroSection} from "@/components/HeroSection/HeroSection.tsx";
-import {Container, SimpleGrid, GridItem, Highlight} from "@chakra-ui/react";
+import {Container, SimpleGrid, GridItem, Highlight, Card, Button, Image} from "@chakra-ui/react";
+import sampleChatImg from "@/assets/images/sample-chat.png";
 
 export const HomePage = () => {
     return (
@@ -9,10 +10,9 @@ export const HomePage = () => {
                 columns={{base: 1, md: 2, lg: 3}}
                 gap={6}
             >
-                <GridItem
-                    rowSpan={2} colSpan={{base: 1, lg: 2}}
-                >
+                <GridItem rowSpan={2} colSpan={{base: 1, lg: 2}}>
                     <HeroSection
+                        border = {false}
                         title = {
                             <Highlight query={"I am Alexander"} styles={{ color: "purple.fg" }}>Hello, I am Alexander</Highlight>
                         }
@@ -27,6 +27,22 @@ export const HomePage = () => {
                         secondaryButtonText="My Projects"
                         onSecondaryButtonClick={() => window.location.href = "/projects"}
                     />
+                </GridItem>
+
+                <GridItem rowSpan={2} colSpan={1}>
+
+                    <Card.Root>
+                        <Image src={sampleChatImg} alt="Sample Chat" />
+                        <Card.Body>
+                            <Card.Title>AI-Powered Chat</Card.Title>
+                            <Card.Description>Ask anything in the GPT-powered chat about my background, education, experience, and projects.</Card.Description>
+                        </Card.Body>
+                        <Card.Footer gap="2">
+                            <Button variant="solid">Start chat</Button>
+                            <Button variant="ghost">How it works</Button>
+                        </Card.Footer>
+                    </Card.Root>
+
                 </GridItem>
 
             </SimpleGrid>

@@ -5,6 +5,7 @@ interface HeroSectionProps {
     title: string | ReactNode;
     subtitle: string | ReactNode;
     centerContent?: boolean;
+    border?: boolean;
     primaryButtonText?: string;
     onPrimaryButtonClick?: () => void;
     secondaryButtonText?: string;
@@ -15,6 +16,7 @@ export const HeroSection = ({
                                 title,
                                 subtitle,
                                 centerContent = false,
+                                border = true,
                                 primaryButtonText = "Get Started",
                                 onPrimaryButtonClick = undefined,
                                 secondaryButtonText,
@@ -30,11 +32,11 @@ export const HeroSection = ({
         <Container
             maxW={{base: "xl", lg: "2xl", xl: "4xl"}}
             centerContent={centerContent}
-            p={{base: 5, md: 7, lg: 10}}
+            p={border ? {base: 5, md: 7, lg: 10} : 0}
             borderRadius="3xl"
             borderColor="border.emphasized"
             borderWidth={1}
-            borderStyle="solid"
+            borderStyle={border? "solid": "none"}
         >
             <Heading
                 as="h1"

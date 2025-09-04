@@ -29,14 +29,14 @@ const NavigationButtonGroup = ({navButtonLinks, orientation="horizontal"}: Navig
         return (
             <For each={navButtonLinks}>
                 {(link, index) => (
-                    <Button
-                        key={index}
-                        as={RouterLink}
-                        to={link.path}
-                        variant={location.pathname === link.path ? 'surface' : 'ghost'}
-                    >
-                        {link.label}
-                    </Button>
+                    <RouterLink to={link.path} key={index}>
+                        <Button
+                            key={index}
+                            variant={location.pathname === link.path ? 'surface' : 'ghost'}
+                        >
+                            {link.label}
+                        </Button>
+                    </RouterLink>
                 )}
             </For>
         );

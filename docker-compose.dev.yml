@@ -10,6 +10,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -25,13 +30,20 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
+      SPRING_PROFILES_ACTIVE: dev
+      # Optional: enable/disable recaptcha in dev quickly
+      RECAPTCHA_ENABLED: "false"
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       - /app/build
+      - gradle_cache:/home/gradle/.gradle
+    # Continuous rebuild + run for hot reload
+    command: ["./gradlew", "-t", "bootRun"]
 
   frontend:
     build:
@@ -40,6 +52,11 @@ services:
     container_name: the_resume_frontend_dev
     ports:
       - "3000:3000"
+    environment:
+      CHOKIDAR_USEPOLLING: "1"
+      # If you keep direct calls from browser to BE:
+      VITE_API_URL: "http://localhost:8080"
+      # If you switch to proxy, you can drop the line above and call '/api/*'
     depends_on:
       - backend
     volumes:
@@ -48,3 +65,4 @@ services:
 
 volumes:
   postgres_data:
+  gradle_cache:

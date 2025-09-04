@@ -14,15 +14,14 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import java.util.Map;
 import java.util.UUID;
+import static com.muryshkin.net.backend.common.IpUtil.clientIp;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/chat")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class ChatController {
 
@@ -35,23 +34,21 @@ public class ChatController {
     @PostMapping("/session")
     public Mono<Map<String, String>> createSession(
             @RequestParam("recaptchaToken") String recaptchaToken,
-            HttpServletRequest request) {
+            ServerHttpRequest request) {
 
         if (recaptchaToken == null || recaptchaToken.isBlank()) {
             throw new BadRequestException("Missing reCAPTCHA token.");
         }
 
-        String clientIp = request.getRemoteAddr();
-        rateLimitService.checkSessionLimit(clientIp);
+        String ip = clientIp(request);
+        rateLimitService.checkSessionLimit(ip);
 
         return recaptchaService.verifyToken(recaptchaToken)
                 .flatMap(valid -> {
-                    if (!valid) {
-                        throw new RecaptchaVerificationException("reCAPTCHA verification failed.");
-                    }
+                    if (!valid) return Mono.error(new RecaptchaVerificationException("reCAPTCHA verification failed."));
                     String sessionId = UUID.randomUUID().toString();
                     String jwt = jwtTokenService.generateToken(sessionId);
-                    log.info("Issued new session for IP={}, sessionId={}", clientIp, sessionId);
+                    log.info("Issued new session for IP={}, sessionId={}", ip, sessionId);
                     return Mono.just(Map.of("sessionId", sessionId, "token", jwt));
                 });
     }
@@ -61,7 +58,7 @@ public class ChatController {
     public Mono<Map<String, String>> renewToken(
             @RequestHeader("Authorization") String authorization,
             @RequestParam("recaptchaToken") String recaptchaToken,
-            HttpServletRequest request) {
+            ServerHttpRequest request) {
 
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new InvalidTokenException("Missing or invalid Authorization header.");
@@ -71,16 +68,14 @@ public class ChatController {
         }
 
         String token = authorization.substring(7);
-        String clientIp = request.getRemoteAddr();
-        rateLimitService.checkRenewLimit(clientIp);
+        String ip = clientIp(request);
+        rateLimitService.checkRenewLimit(ip);
 
         return recaptchaService.verifyToken(recaptchaToken)
                 .flatMap(valid -> {
-                    if (!valid) {
-                        throw new RecaptchaVerificationException("reCAPTCHA verification failed.");
-                    }
+                    if (!valid) return Mono.error(new RecaptchaVerificationException("reCAPTCHA verification failed."));
                     String newToken = jwtTokenService.renewToken(token);
-                    log.info("Token renewed for IP={}", clientIp);
+                    log.info("Token renewed for IP={}", ip);
                     return Mono.just(Map.of("token", newToken));
                 });
     }
@@ -90,8 +85,7 @@ public class ChatController {
     public Flux<String> streamChat(
             @RequestHeader("Authorization") String authorization,
             @RequestParam String message,
-            HttpServletRequest request) {
-
+            ServerHttpRequest request) {
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             throw new InvalidTokenException("Missing or invalid Authorization header.");
         }
@@ -102,10 +96,10 @@ public class ChatController {
         String token = authorization.substring(7);
         String sessionId = jwtTokenService.validateAndGetSessionId(token);
 
-        String clientIp = request.getRemoteAddr();
-        rateLimitService.checkMessageLimit(clientIp);
+        String ip = clientIp(request);
+        rateLimitService.checkMessageLimit(ip);
 
-        log.info("Streaming chat response for sessionId={}, IP={}", sessionId, clientIp);
+        log.info("Streaming chat response for sessionId={}, IP={}", sessionId, ip);
         return chatService.streamChatResponse(sessionId, message);
     }
 
