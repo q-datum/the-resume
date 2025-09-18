@@ -1,16 +1,15 @@
 FROM node:20-alpine
 
 RUN apk add --no-cache libc6-compat
-
 WORKDIR /app
 
+# Install only when deps change (best layer caching)
 COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 
-# Set robust file watching for Docker bind mounts
-ENV CHOKIDAR_USEPOLLING=1
+# Copy only what's needed for vite to start if you ever run without a bind mount.
+# (In dev we bind-mount the project anyway.)
+COPY . .
 
-# The source will come from the bind mount, no need to COPY . here
 EXPOSE 3000
-
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]

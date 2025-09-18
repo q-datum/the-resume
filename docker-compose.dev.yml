@@ -31,7 +31,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
       SPRING_PROFILES_ACTIVE: dev
-      # Optional: enable/disable recaptcha in dev quickly
       RECAPTCHA_ENABLED: "false"
     ports:
       - "8080:8080"
@@ -42,7 +41,6 @@ services:
       - ./backend:/app
       - /app/build
       - gradle_cache:/home/gradle/.gradle
-    # Continuous rebuild + run for hot reload
     command: ["./gradlew", "-t", "bootRun"]
 
   frontend:
@@ -50,19 +48,20 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: the_resume_frontend_dev
-    ports:
-      - "3000:3000"
     environment:
       CHOKIDAR_USEPOLLING: "1"
-      # If you keep direct calls from browser to BE:
-      VITE_API_URL: "http://localhost:8080"
-      # If you switch to proxy, you can drop the line above and call '/api/*'
+      VITE_API_BASE_URL: "/"
+      VITE_RECAPTCHA_SITE_KEY: ${VITE_RECAPTCHA_SITE_KEY}
+      BACKEND_ORIGIN: http://backend:8080
+    ports:
+      - "3000:3000"
     depends_on:
       - backend
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend:/app        # your source (bind mount)
+      - node_modules:/app/node_modules  # keep deps separate & persistent
 
 volumes:
   postgres_data:
   gradle_cache:
+  node_modules:
