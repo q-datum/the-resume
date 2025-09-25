@@ -76,20 +76,24 @@ public class ChatService {
             throw new BadRequestException("Message cannot be null or blank.");
         }
 
-        log.info("Streaming chat response: sessionId={}, message={}", sessionId, message);
-        AtomicReference<StringBuilder> assistantReplyBuffer = new AtomicReference<>(new StringBuilder());
+        AtomicReference<StringBuilder> buf = new AtomicReference<>(new StringBuilder());
 
-        // Save user message, then stream assistant response
-        return saveUserMessage(sessionId, message)
-                .thenMany(fetchHistory(sessionId)
-                        .collectList()
-                        .flatMapMany(history -> streamAssistantResponse(history, assistantReplyBuffer)
-                                .concatWith(saveAssistantMessageAsync(sessionId, assistantReplyBuffer.get().toString())
-                                        .thenMany(Flux.empty()))
-                        )
+        Mono<List<ChatMessage>> historyMono = saveUserMessage(sessionId, message)
+                .then(fetchHistory(sessionId).collectList());
+
+        return historyMono.flatMapMany(history ->
+                        streamAssistantResponse(history, buf)
+                                .concatWith(
+                                        Mono.defer(() -> saveAssistantMessageAsync(sessionId, buf.get().toString()))
+                                                .thenMany(Flux.empty())
+                                )
                 )
-                .doOnComplete(() -> log.info("Final assistant reply for sessionId={}: {}", sessionId, assistantReplyBuffer.get()))
-                .doOnError(err -> log.error("Error during chat for sessionId={}: {}", sessionId, err.getMessage(), err));
+                .doOnComplete(() ->
+                        log.info("Final assistant reply for sessionId={}: {}", sessionId, buf.get())
+                )
+                .doOnError(err ->
+                        log.error("Error during chat for sessionId={}", sessionId, err)
+                );
     }
 
     /**
@@ -152,6 +156,7 @@ public class ChatService {
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + openAiApiKey)
                 .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)

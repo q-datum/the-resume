@@ -1,4 +1,17 @@
-import {Bleed, Box, Button, Center, Clipboard, Flex, IconButton, Link, Text, Textarea} from "@chakra-ui/react";
+import {
+    Bleed,
+    Box,
+    Button,
+    Center,
+    Clipboard,
+    Container,
+    Flex,
+    IconButton,
+    Link,
+    Text,
+    Textarea,
+    useBreakpointValue,
+} from "@chakra-ui/react";
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import {IoSend} from "react-icons/io5";
 import {streamChat$} from "@/features/chat/api/ChatRx";
@@ -28,63 +41,71 @@ const ChatUserInput = ({ value, onChange, onSubmit }: ChatUserInputProps) => {
         [onSubmit]
     );
 
+    const sendButtonLabel = useBreakpointValue({
+        base: "",
+        md: "Send"
+    })
+
     return (
         <Box
             position="fixed"
             bottom="0"
             width="100vw"
             left="0"
-            height={{ base: "20vh", md: "18vh" }}
-            py="4"
+            pt="4"
+            pb="3"
             px={{ base: "4", md: "8", lg: "16", xl: "40" }}
             bg={{ _dark: "rgba(39 39 42, 1)", _light: "rgba(255, 255, 255, 0.3)" }}
             backdropFilter="blur(45px)"
             borderTop="1px solid"
-            borderColor="border.emphasized"
+            borderColor="border"
             zIndex={1000}
         >
-            <Flex
-                maxHeight="10vh"
-                as="form"
-                align="bottom"
-                justify="space-between"
-                onSubmit={handleSubmit}
-            >
-                <Textarea
+            <Container>
+                <Flex
                     maxHeight="10vh"
-                    borderRadius="2xl"
-                    mr={{ base: "4", md: "6", lg: "10" }}
-                    autoresize
-                    placeholder="Type your message..."
-                    size="lg"
-                    variant="subtle"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                />
-                <Center>
-                    <Button size="lg" rounded="full" type="submit">
-                        Send <IoSend />
-                    </Button>
-                </Center>
-            </Flex>
-            <Text textStyle="2xs" textAlign="center" mt="2">
-                This site is protected by reCAPTCHA and the Google&nbsp;
-                <Link color="purple.fg" href="https://policies.google.com/privacy">
-                    Privacy Policy
-                </Link>{" "}
-                and&nbsp;
-                <Link color="purple.fg" href="https://policies.google.com/terms">
-                    Terms of Service
-                </Link>{" "}
-                apply.
-            </Text>
+                    as="form"
+                    align="bottom"
+                    justify="space-between"
+                    onSubmit={handleSubmit}
+                >
+                    <Textarea
+                        maxHeight="10vh"
+                        borderRadius="2xl"
+                        mr={{ base: "4", md: "6", lg: "10" }}
+                        autoresize
+                        placeholder="Type your message..."
+                        size="lg"
+                        variant="subtle"
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                    />
+                    <Center>
+                        <Button size="lg" rounded="full" type="submit">
+                            {sendButtonLabel}
+                            <IoSend />
+                        </Button>
+                    </Center>
+                </Flex>
+                <Text textStyle={{base: "2xs", lg: "xs"}} textAlign="center" mt="4">
+                    This site is protected by reCAPTCHA and the Google&nbsp;
+                    <Link color="purple.fg" href="https://policies.google.com/privacy">
+                        Privacy Policy
+                    </Link>{" "}
+                    and&nbsp;
+                    <Link color="purple.fg" href="https://policies.google.com/terms">
+                        Terms of Service
+                    </Link>{" "}
+                    apply.
+                </Text>
+            </Container>
         </Box>
     );
 };
 
 const UserMessage = ({ content }: { content: string }) => (
     <Flex width="100%" justifyContent="flex-end">
-        <Box bg="purple.subtle" borderRadius="full" px="5" py="3" m="2" maxWidth="70%">
+        <Box bg="purple.subtle" borderRadius="2xl" px="5" py="3" m="2" mr="0" maxWidth="70%">
             {/* preserve user text as typed */}
             <Text whiteSpace="pre-wrap">{content}</Text>
         </Box>
@@ -92,14 +113,13 @@ const UserMessage = ({ content }: { content: string }) => (
 );
 
 const AssistantMessage = ({ content }: { content: string }) => (
-    <Box p="3" m="2" maxWidth="70%">
-        {/* preserve spaces/newlines in streamed text */}
+    <Box p="3" m="2" pl="0" ml="0" maxWidth="70%">
         <Text textStyle="lg" fontWeight="semibold" whiteSpace="pre-wrap">
             {content}
         </Text>
         <Clipboard.Root value={content} style={{ marginTop: 12 }}>
             <Clipboard.Trigger asChild>
-                <IconButton variant="surface" size="xs" borderRadius="2xl" aria-label="Copy to clipboard">
+                <IconButton variant="surface" size="xs" borderRadius="full" aria-label="Copy to clipboard">
                     <Clipboard.Indicator />
                 </IconButton>
             </Clipboard.Trigger>
@@ -109,7 +129,7 @@ const AssistantMessage = ({ content }: { content: string }) => (
 
 const MessagesView = ({ messages }: { messages: Message[] }) => {
     return (
-        <Box px={{ base: "4", md: "8", lg: "16", xl: "40" }} pt={{ base: "4", md: "6", lg: "10" }}>
+        <Box pt={{ base: "4", md: "6", lg: "10" }}>
             {messages.map((msg) =>
                 msg.role === "user" ? (
                     <UserMessage key={msg.id} content={msg.content} />
@@ -213,10 +233,10 @@ export const ChatPage = () => {
     }, [input]);
 
     return (
-        <Box>
+        <Container>
             <ChatUserInput value={input} onChange={setInput} onSubmit={handleSend} />
             <MessagesView messages={messages} />
             <Bleed height={{ base: "22vh", md: "20vh" }} />
-        </Box>
+        </Container>
     );
 };
