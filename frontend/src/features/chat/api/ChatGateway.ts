@@ -2,76 +2,87 @@ import { HttpClient } from "@/shared/http/HttpClient";
 import { AuthInterceptor } from "@/shared/auth/AuthInterceptor";
 import { StreamReader } from "@/shared/http/StreamReader";
 import { HttpError } from "@/shared/http/HttpError";
-import { retryPromise } from "@/shared/async/retry";
+import { parseBackendErrorPayload, isTokenErrorPayload } from "@/shared/http/BackendError";
 
-import type { TokenStore } from "@/shared/auth/TokenStore";
+import type { SessionStore } from "@/shared/auth/SessionStore";
 import type { RecaptchaProvider } from "@/shared/recaptcha/RecaptchaProvider";
 import type { ChatMessage, CreateSessionResponse, RenewTokenResponse } from "./types";
 
 export class ChatGateway {
-    private readonly http: HttpClient;
-    private readonly auth: AuthInterceptor;
-    private readonly streams: StreamReader;
-    private readonly tokenStore: TokenStore;
+    private readonly http = new HttpClient();
+    private readonly streams = new StreamReader();
+    private readonly store: SessionStore;
     private readonly recaptcha: RecaptchaProvider;
+    private readonly auth: AuthInterceptor;
+    private renewInFlight: Promise<void> | null = null;
 
-    private static readonly RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
-    private static readonly DEFAULT_BACKOFF = { retries: 3, baseMs: 300, capMs: 2500, jitter: true } as const;
-    // private static readonly LIGHT_BACKOFF    = { retries: 2, baseMs: 300, capMs: 1500, jitter: true } as const;
-
-    constructor(tokenStore: TokenStore, recaptcha: RecaptchaProvider) {
-        this.http = new HttpClient();
-        this.streams = new StreamReader();
-        this.tokenStore = tokenStore;
+    constructor(store: SessionStore, recaptcha: RecaptchaProvider) {
+        this.store = store;
         this.recaptcha = recaptcha;
-
-        // 👇 Auth now knows how to mint a token if none exists
-        this.auth = new AuthInterceptor(tokenStore, {
-            onDemandToken: async () => {
-                const captcha = await this.recaptcha.getToken("session");
-                const resp = await this.http.json<CreateSessionResponse>("/api/chat/session", {
-                    method: "POST",
-                    query: { recaptchaToken: captcha },
-                });
-                this.tokenStore.setToken(resp.token);
-                return resp.token;
-            },
-        });
+        this.auth = new AuthInterceptor(store);
     }
 
-    /** Still available if you ever want to call it explicitly */
-    async createSession(recaptchaToken: string): Promise<CreateSessionResponse> {
+    // ---------- Session lifecycle ----------
+    private async ensureSession(): Promise<void> {
+        const sid = this.store.getSessionId();
+        const tok = this.store.getToken();
+        if (sid && tok) return;
+
+        const captcha = await this.recaptcha.getToken("session");
         const resp = await this.http.json<CreateSessionResponse>("/api/chat/session", {
             method: "POST",
-            query: { recaptchaToken },
+            query: { recaptchaToken: captcha },
         });
-        this.tokenStore.setToken(resp.token);
-        return resp;
+        // /session returns both
+        this.store.setSessionId(resp.sessionId);
+        this.store.setToken(resp.token);
     }
 
-    async renewToken(recaptchaToken: string): Promise<RenewTokenResponse> {
-        // Token exists (maybe expired); attach sync is enough
-        const headers = this.auth.attachAuth();
-        const resp = await this.http.json<RenewTokenResponse>("/api/chat/renew", {
-            method: "POST",
-            headers,
-            query: { recaptchaToken },
-        });
-        this.tokenStore.setToken(resp.token);
-        return resp;
+    private async renewOnce(): Promise<void> {
+        if (this.renewInFlight) return this.renewInFlight;
+        this.renewInFlight = (async () => {
+            const captcha = await this.recaptcha.getToken("renew");
+            const headers = this.auth.attachAuth();
+            const resp = await this.http.json<RenewTokenResponse>("/api/chat/renew", {
+                method: "POST",
+                headers,
+                query: { recaptchaToken: captcha },
+            });
+            this.store.setToken(resp.token);
+        })();
+        try { await this.renewInFlight; } finally { this.renewInFlight = null; }
     }
 
-    async getHistory(): Promise<ChatMessage[]> {
-        return this.withBackoffAutoRenew(async () => {
-            const headers = await this.auth.attachAuthAsync();
+    private abortSession(): void {
+        this.store.clear();
+    }
+
+    // ---------- Public API ----------
+    /** Scenario B helper: if both present, download history; otherwise return empty list */
+    async tryGetHistory(): Promise<ChatMessage[]> {
+        const sid = this.store.getSessionId();
+        const tok = this.store.getToken();
+        if (!sid || !tok) return [];
+
+        const run = async (): Promise<ChatMessage[]> => {
+            const headers = this.auth.attachAuth();
             return this.http.json<ChatMessage[]>("/api/chat/history", { headers });
-        });
+        };
+
+        try {
+            return await run();
+        } catch (err) {
+            if (this.isTokenError(err)) {
+                await this.renewOnce();
+                const headers = this.auth.attachAuth();
+                return this.http.json<ChatMessage[]>("/api/chat/history", { headers });
+            }
+            this.abortSession(); // unexpected → abort (temp policy)
+            throw err;
+        }
     }
 
-    /**
-     * Streams chat. If no token exists, it will auto-create a session first.
-     * Still does a single 401-driven auto-renew if needed.
-     */
+    /** Stream chat with one-time in-stream renew+restart on token error */
     streamChat(args: {
         message: string;
         onChunk: (text: string) => void;
@@ -81,75 +92,80 @@ export class ChatGateway {
     }): AbortController {
         const { message, onChunk, onError, onClose, signal } = args;
 
-        const controller = new AbortController();
-        const mergedSignal = this.mergeSignals(controller.signal, signal);
+        const userAbort = new AbortController();
+        const userSignal = this.mergeSignals(userAbort.signal, signal);
 
         const start = async (attempt: "initial" | "retryAfterRenew"): Promise<void> => {
-            try {
-                const headers = await this.auth.attachAuthAsync({ Accept: "text/event-stream" });
+            const attemptAbort = new AbortController();
+            const merged = this.mergeSignals(attemptAbort.signal, userSignal);
+            let renewingInStream = false;
 
+            try {
+                await this.ensureSession();
+
+                const headers = this.auth.attachAuth({ Accept: "text/event-stream" });
                 const res = await this.http.stream("/api/chat/stream", {
                     method: "GET",
                     headers,
                     query: { message },
-                    signal: mergedSignal,
+                    signal: merged,
                 });
 
-                await this.streams.readSSE(res, { onChunk, onError, onClose });
+                await this.streams.readSSE(res, {
+                    onChunk: async (payload) => {
+                        const p = parseBackendErrorPayload(payload);
+                        if (attempt === "initial" && isTokenErrorPayload(p)) {
+                            renewingInStream = true;
+                            attemptAbort.abort();
+                            try {
+                                await this.renewOnce();
+                                if (!userSignal.aborted) void start("retryAfterRenew");
+                            } catch (e) {
+                                this.abortSession();
+                                onError?.(e);
+                            }
+                            return; // suppress error payload from reaching UI
+                        }
+                        onChunk(payload);
+                    },
+                    onError: (err) => {
+                        if (renewingInStream && err instanceof DOMException && err.name === "AbortError") return;
+                        this.abortSession();
+                        onError?.(err);
+                    },
+                    onClose: () => {
+                        if (renewingInStream) return; // restart scheduled
+                        onClose?.();
+                    },
+                });
             } catch (err) {
-                if (
-                    attempt === "initial" &&
-                    err instanceof HttpError &&
-                    err.status === 401 &&
-                    !mergedSignal.aborted
-                ) {
+                // connect-phase token errors:
+                if (attempt === "initial" && this.isTokenError(err) && !userSignal.aborted) {
                     try {
-                        const captcha = await this.recaptcha.getToken("renew");
-                        await this.renewToken(captcha);
-                        if (!mergedSignal.aborted) void start("retryAfterRenew");
+                        await this.renewOnce();
+                        if (!userSignal.aborted) void start("retryAfterRenew");
                         return;
-                    } catch (renewErr) {
-                        onError?.(renewErr);
+                    } catch (e) {
+                        this.abortSession();
+                        onError?.(e);
                         return;
                     }
                 }
+                // unexpected → abort and bubble
+                this.abortSession();
                 onError?.(err);
             }
         };
 
         void start("initial");
-        return controller;
+        return userAbort;
     }
 
-    private async withBackoffAutoRenew<T>(op: () => Promise<T>): Promise<T> {
-        return retryPromise(
-            async () => this.withAutoRenew(op),
-            ChatGateway.DEFAULT_BACKOFF,
-            (err) => this.isRetryableTransient(err)
-        );
-    }
-
-    private async withAutoRenew<T>(op: () => Promise<T>): Promise<T> {
-        try {
-            // Ensure we have a token *before* the op
-            await this.auth.attachAuthAsync();
-            return await op();
-        } catch (err) {
-            if (err instanceof HttpError && err.status === 401) {
-                const captcha = await this.recaptcha.getToken("renew");
-                await this.renewToken(captcha);
-                return op();
-            }
-            throw err;
-        }
-    }
-
-    private isRetryableTransient(err: unknown): boolean {
-        if (err instanceof DOMException && err.name === "AbortError") return false;
-        if (err instanceof TypeError) return true;
+    // ---------- helpers ----------
+    private isTokenError(err: unknown): boolean {
         if (err instanceof HttpError) {
-            if (err.status === 401) return false;
-            return ChatGateway.RETRYABLE_STATUSES.has(err.status);
+            if (err.status === 401) return true;
+            return isTokenErrorPayload(err.payload);
         }
         return false;
     }
@@ -158,10 +174,7 @@ export class ChatGateway {
         if (!b || a === b) return a;
         const merged = new AbortController();
         const abort = (): void => merged.abort();
-        if (a.aborted || b.aborted) {
-            merged.abort();
-            return merged.signal;
-        }
+        if (a.aborted || b.aborted) { merged.abort(); return merged.signal; }
         a.addEventListener("abort", abort);
         b.addEventListener("abort", abort);
         return merged.signal;
