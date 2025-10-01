@@ -8,14 +8,19 @@ import {
     Flex,
     IconButton,
     Link,
+    Spinner,
     Text,
     Textarea,
     useBreakpointValue,
 } from "@chakra-ui/react";
+import { Prose } from "@/components/ui/prose"
 import React, {useCallback, useEffect, useRef, useState} from "react";
 import {IoSend} from "react-icons/io5";
+import { MdRefresh } from "react-icons/md";
 import {streamChat$} from "@/features/chat/api/ChatRx";
 import {chatApi} from "@/app/wiring/chat";
+import Markdown from "react-markdown";
+import remarkGfm from 'remark-gfm'
 
 interface Message {
     id: string;
@@ -30,9 +35,10 @@ type ChatUserInputProps = {
     value: string;
     onChange: (v: string) => void;
     onSubmit: () => void;
+    isStreaming?: boolean;
 };
 
-const ChatUserInput = ({ value, onChange, onSubmit }: ChatUserInputProps) => {
+const ChatUserInput = ({ value, onChange, onSubmit, isStreaming }: ChatUserInputProps) => {
     const handleSubmit = useCallback(
         (e: React.FormEvent) => {
             e.preventDefault();
@@ -81,7 +87,7 @@ const ChatUserInput = ({ value, onChange, onSubmit }: ChatUserInputProps) => {
                         onChange={(e) => onChange(e.target.value)}
                     />
                     <Center>
-                        <Button size="lg" rounded="full" type="submit">
+                        <Button size="lg" rounded="full" type="submit" disabled={isStreaming}>
                             {sendButtonLabel}
                             <IoSend />
                         </Button>
@@ -106,17 +112,23 @@ const ChatUserInput = ({ value, onChange, onSubmit }: ChatUserInputProps) => {
 const UserMessage = ({ content }: { content: string }) => (
     <Flex width="100%" justifyContent="flex-end">
         <Box bg="purple.subtle" borderRadius="2xl" px="5" py="3" m="2" mr="0" maxWidth="70%">
-            {/* preserve user text as typed */}
             <Text whiteSpace="pre-wrap">{content}</Text>
         </Box>
     </Flex>
 );
 
 const AssistantMessage = ({ content }: { content: string }) => (
-    <Box p="3" m="2" pl="0" ml="0" maxWidth="70%">
-        <Text textStyle="lg" fontWeight="semibold" whiteSpace="pre-wrap">
-            {content}
-        </Text>
+    <Box p="3" m="2" mt="7" pl="0" ml={{base: "2", md: "0"}} maxWidth={{base: "90%", md: "70%"}} overflowX="auto">
+        {
+            content === "" ? <Spinner size="sm" />
+            :
+            <Prose size="xl" baseColor="fg">
+                <Markdown remarkPlugins={[remarkGfm]}>
+                    {content}
+                </Markdown>
+            </Prose>
+        }
+
         <Clipboard.Root value={content} style={{ marginTop: 12 }}>
             <Clipboard.Trigger asChild>
                 <IconButton variant="surface" size="xs" borderRadius="full" aria-label="Copy to clipboard">
@@ -141,16 +153,34 @@ const MessagesView = ({ messages }: { messages: Message[] }) => {
     );
 };
 
-/** ───────────────── Page with API integration (no visual changes) ───────────────── */
+const ClearChatButton = ({ onClear }: { onClear: () => void }) => (
+    <Box position="fixed" bottom="150px" width="100vw" left="0" zIndex={1000}>
+        <Center>
+            <Button
+                variant="outline"
+                borderRadius="full"
+                size="sm"
+                onClick={onClear}
+                bg={{ _dark: "rgba(39 39 42, 1)", _light: "rgba(255, 255, 255, 0.3)" }}
+                backdropFilter="blur(45px)"
+            >
+                <MdRefresh />
+                New Session
+            </Button>
+        </Center>
+    </Box>
+
+);
 
 export const ChatPage = () => {
     const [messages, setMessages] = useState<Message[]>([
-        // keep your dummy content if you like, or start empty
         { id: "1", role: "user", content: "Hello, who are you?", timestamp: new Date().toISOString() },
         { id: "2", role: "assistant", content: "I am an AI assistant. How can I help you today?", timestamp: new Date().toISOString() },
     ]);
     const [input, setInput] = useState("");
+    const [isStreaming, setIsStreaming] = useState(false);
 
+    const loadedHistoryRef = React.useRef(false);
     const subRef = useRef<ReturnType<typeof streamChat$>["subscribe"] | null>(null);
     const idRef = useRef(1000);
 
@@ -165,23 +195,28 @@ export const ChatPage = () => {
         };
     }, []);
 
-    // inside ChatPage component:
-    useEffect(() => {
-        let cancelled = false;
+    React.useEffect(() => {
+        if (loadedHistoryRef.current) return;
+        loadedHistoryRef.current = true;
+
         (async () => {
             try {
                 const history = await chatApi.tryGetHistory();
-                if (!cancelled && history.length) {
-                    setMessages((prev) => [...prev, ...history.map(m => ({
-                        id: m.id, role: m.role, content: m.content, timestamp: m.timestamp
-                    }))]);
+                if (history.length) {
+                    setMessages((prev) => [
+                        ...prev,
+                        ...history.map((m) => ({
+                            id: m.id,
+                            role: m.role,
+                            content: m.content,
+                            timestamp: m.timestamp,
+                        })),
+                    ]);
                 }
             } catch (e) {
-                // For now: log only; gateway already clears session on unexpected errors
-                console.error("[history] error", e);
+                console.error("[history] load failed:", e);
             }
         })();
-        return () => { cancelled = true; };
     }, []);
 
     const nextId = () => String(++idRef.current);
@@ -190,7 +225,6 @@ export const ChatPage = () => {
         const content = input.trim();
         if (!content) return;
 
-        // Cancel any existing stream
         if (subRef.current) {
             // @ts-expect-error rxjs subscription at runtime
             subRef.current.unsubscribe();
@@ -212,6 +246,7 @@ export const ChatPage = () => {
 
         // 2) start streaming
         console.log("[chat] stream start:", content);
+        setIsStreaming(true);
         const obs = streamChat$(chatApi, content, { count: 3, baseMs: 300, capMs: 2500, jitter: true });
 
         // @ts-expect-error rxjs subscription at runtime
@@ -225,18 +260,32 @@ export const ChatPage = () => {
             },
             error: (err) => {
                 console.error("[chat] stream error:", err);
+                setIsStreaming(false);
             },
             complete: () => {
                 console.log("[chat] stream complete");
+                setIsStreaming(false);
             },
         });
     }, [input]);
 
+    const handleClear = useCallback(() => {
+        if (subRef.current) {
+            // @ts-expect-error rxjs subscription at runtime
+            subRef.current.unsubscribe();
+            subRef.current = null;
+        }
+
+        chatApi.abortSession();
+        location.reload();
+    }, []);
+
     return (
         <Container>
-            <ChatUserInput value={input} onChange={setInput} onSubmit={handleSend} />
+            <ChatUserInput value={input} onChange={setInput} onSubmit={handleSend} isStreaming={isStreaming}/>
             <MessagesView messages={messages} />
-            <Bleed height={{ base: "22vh", md: "20vh" }} />
+            <ClearChatButton onClear={handleClear}/>
+            <Bleed height={{base: "20vh", md: "15vh"}} />
         </Container>
     );
 };

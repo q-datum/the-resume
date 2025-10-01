@@ -58,8 +58,8 @@ services:
     depends_on:
       - backend
     volumes:
-      - ./frontend:/app        # your source (bind mount)
-      - node_modules:/app/node_modules  # keep deps separate & persistent
+      - ./frontend:/app
+      - node_modules:/app/node_modules
 
 volumes:
   postgres_data:

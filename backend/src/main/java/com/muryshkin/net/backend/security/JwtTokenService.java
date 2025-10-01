@@ -46,19 +46,19 @@ public class JwtTokenService {
 
     /** Validate and get sessionId from token */
     public String validateAndGetSessionId(String token) {
-        Claims claims = parseToken(token);
+        Claims claims = parseToken(token, true);
         return claims.getSubject();
     }
 
     /** Issue a new token with the same sessionId */
     public String renewToken(String oldToken) {
-        Claims claims = parseToken(oldToken);
+        Claims claims = parseToken(oldToken, false);
         String sessionId = claims.getSubject();
         return generateToken(sessionId);
     }
 
     /** Parse token and validate signature/expiration with error handling */
-    private Claims parseToken(String token) {
+    private Claims parseToken(String token, boolean strict) {
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("JWT token is missing");
         }
@@ -71,6 +71,9 @@ public class JwtTokenService {
                     .parseClaimsJws(token)
                     .getBody();
         } catch (ExpiredJwtException e) {
+            if (!strict) {
+                return e.getClaims();
+            }
             log.warn("JWT token has expired: {}", e.getMessage());
             throw new InvalidTokenException("JWT token has expired");
         } catch (UnsupportedJwtException e) {

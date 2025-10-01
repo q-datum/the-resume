@@ -1,12 +1,23 @@
 import { Observable, defer, retry, timer } from "rxjs";
 import type { ChatGateway } from "./ChatGateway";
-import { computeBackoffMs } from "@/shared/async/retry";
 
 export interface ConnectRetryOptions {
     count: number;      // how many reconnect attempts (only if the stream fails BEFORE first chunk)
     baseMs: number;
     capMs: number;
     jitter?: boolean;
+}
+
+interface BackoffOptions {
+    retries: number;    // number of retries (not counting the first attempt)
+    baseMs: number;     // initial backoff in ms
+    capMs: number;      // max backoff per attempt
+    jitter?: boolean;   // full jitter
+}
+
+function computeBackoffMs(attemptIndex: number, opts: BackoffOptions): number {
+    const expo = Math.min(opts.capMs, opts.baseMs * 2 ** attemptIndex);
+    return opts.jitter ? Math.floor(Math.random() * expo) : expo;
 }
 
 /**

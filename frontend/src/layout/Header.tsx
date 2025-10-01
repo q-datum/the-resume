@@ -1,14 +1,14 @@
 import {
     Box,
     ButtonGroup,
-    Heading,
     Button,
     Flex,
+    Text,
     Container,
     IconButton,
     Drawer,
     Portal,
-    CloseButton, For
+    CloseButton, For, Center
 } from "@chakra-ui/react";
 import { FaGithub } from "react-icons/fa";
 import { CgMenu } from "react-icons/cg";
@@ -140,10 +140,24 @@ type HeaderProps = {
 export const Header = ({navButtonLinks}: HeaderProps) => {
 
     return (
-        <Box borderBottom={"1px solid"} borderColor="border" paddingTop={4} paddingBottom={3}>
+        <Box
+            borderBottom={"1px solid"}
+            borderColor="border"
+            paddingTop={4}
+            paddingBottom={3}
+            position="fixed"
+            width="100%"
+            bg={{ _dark: "rgba(39 39 42, 1)", _light: "rgba(255, 255, 255, 0.3)" }}
+            backdropFilter="blur(45px)"
+            zIndex={1000}
+        >
             <Container>
                 <Flex justify="space-between">
-                    <Heading fontWeight="bold">Alexander Muryshkin</Heading>
+                    <Center h={10}>
+                        <Text fontWeight="bold" textStyle={{base: "md", md: "lg"}}>
+                            Alexander Muryshkin
+                        </Text>
+                    </Center>
                     <Flex
                         display={{ base: 'none', md: 'flex' }}
                         direction="row"

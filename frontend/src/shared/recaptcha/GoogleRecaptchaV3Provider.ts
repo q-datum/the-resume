@@ -1,7 +1,13 @@
 import { load } from "recaptcha-v3";
-import type { RecaptchaProvider } from "./RecaptchaProvider";
 
 type Execable = { execute: (action: string) => Promise<string> };
+
+export class RecaptchaError extends Error { constructor(msg: string) { super(msg); this.name = "RecaptchaError"; } }
+
+export interface RecaptchaProvider {
+    /** Obtain a fresh reCAPTCHA token for a given action (e.g., "renew"). */
+    getToken(action: string): Promise<string>;
+}
 
 export interface GoogleRecaptchaV3Options {
     autoHideBadge?: boolean;
@@ -23,7 +29,12 @@ export class GoogleRecaptchaV3Provider implements RecaptchaProvider {
 
     async getToken(action: string): Promise<string> {
         const inst = await this.ensureInstance();
-        return inst.execute(action);
+        try {
+            return await inst.execute(action);
+        } catch (e) {
+            console.error("[recaptcha] getToken failed:", e);
+            throw new RecaptchaError("reCAPTCHA token acquisition failed");
+        }
     }
 
     private ensureInstance(): Promise<Execable> {
