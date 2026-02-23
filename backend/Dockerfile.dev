@@ -1,0 +1,16 @@
+# Gradle + JDK 17
+FROM gradle:8.5-jdk17
+
+WORKDIR /app
+
+# Prime caches: only Gradle wrapper + build scripts first
+COPY build.gradle settings.gradle gradlew gradlew.bat ./
+COPY gradle ./gradle
+
+# Warm up dependency cache (ignore failure if no sources yet)
+RUN ./gradlew build -x test || true
+
+# The source tree will be bind-mounted at runtime.
+EXPOSE 8080
+
+# Actual run command is set in compose (continuous mode)
