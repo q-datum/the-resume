@@ -8,4 +8,5 @@ export const navLinks: INavLink[] = [
     { label: 'Projects', path: '/projects' },
     { label: 'Chat', path: '/chat' },
     { label: 'Contact', path: '/contact' },
+    { label: 'Privacy', path: '/privacy' }
 ];

@@ -48,7 +48,13 @@ export const HeroSection = ({
             >
                 {title}
             </Heading>
-            <Heading as="h2" size="lg" fontWeight="medium" textAlign={headingAlign}>
+            <Heading
+                as="h2"
+                size="lg"
+                fontWeight="medium"
+                textAlign={headingAlign}
+                maxW={centerContent ? "70%" : "100%"}
+            >
                 {subtitle}
             </Heading>
 

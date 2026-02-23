@@ -15,14 +15,18 @@ import { CgMenu } from "react-icons/cg";
 import * as React from "react";
 import {ColorModeButton} from "@/components/ui/color-mode.tsx";
 import type {INavLink} from "@/layout/navLinks.ts";
-import { useLocation, Link as RouterLink } from 'react-router-dom';
+import {useLocation, Link as RouterLink} from 'react-router-dom';
 
 type NavigationButtonGroupProps = {
     navButtonLinks: INavLink[];
     orientation?: "vertical" | "horizontal";
 }
 
-const NavigationButtonGroup = ({navButtonLinks, orientation="horizontal"}: NavigationButtonGroupProps) => {
+const NavigationButtonGroup = ({
+                                   navButtonLinks,
+                                   orientation="horizontal",
+}: NavigationButtonGroupProps) => {
+
     const location = useLocation();
 
     const getNavButtons = () => {
@@ -101,8 +105,15 @@ type NavigationIconButtonGroupProps = {
     showMenu?: boolean;
 }
 
-const NavigationIconButtonGroup = ({navButtonLinks, showMenu = false}: NavigationIconButtonGroupProps) => {
+const NavigationIconButtonGroup = ({
+                                       navButtonLinks,
+                                       showMenu = false
+}: NavigationIconButtonGroupProps) => {
+
     const [isOpen, setIsOpen] = React.useState(false);
+    const openGithubProfile = () => {
+        window.open("https://github.com/q-datum/the-resume", "_blank", "noopener,noreferrer");
+    }
 
     return (
         <ButtonGroup key="navigation-icon-button-group" paddingLeft="20px">
@@ -110,6 +121,7 @@ const NavigationIconButtonGroup = ({navButtonLinks, showMenu = false}: Navigatio
                 variant={'ghost'}
                 aria-label="GitHub profile"
                 key="github-ib"
+                onClick={openGithubProfile}
             >
                 <FaGithub />
             </IconButton>
