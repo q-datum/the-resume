@@ -33,6 +33,7 @@ export const HeroSection = ({
             maxW={{base: "xl", lg: "2xl", xl: "4xl"}}
             centerContent={centerContent}
             p={border ? {base: 5, md: 7, lg: 10} : 0}
+            m={0}
             borderRadius="3xl"
             borderColor="border.emphasized"
             borderWidth={1}
@@ -40,7 +41,7 @@ export const HeroSection = ({
         >
             <Heading
                 as="h1"
-                size={{base: "2xl", lg: "4xl", xl: "6xl"}}
+                size={{base: "5xl", xl: "6xl"}}
                 color="gray.fg"
                 fontWeight="bold"
                 textAlign={headingAlign}
