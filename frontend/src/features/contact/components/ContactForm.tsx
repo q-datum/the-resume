@@ -18,10 +18,20 @@ import type {ContactRequest} from "@/features/contact/api/ContactGateway.ts";
 import {type ChangeEvent, useState} from "react";
 import {RiArrowRightLine} from "react-icons/ri";
 
+type FormErrorMsg = {
+    name: string;
+    email: string;
+    message: string;
+}
+
 export const ContactForm = () => {
     const [formState, setFormState] = useState<ContactRequest>();
     const [isFormSending, setIsFormSending] = useState(false);
     const [isSentSuccess, setIsSentSuccess] = useState(false);
+    const [isNameError, setIsNameError] = useState(false);
+    const [isEmailError, setIsEmailError] = useState(false);
+    const [isMessageError, setIsMessageError] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<FormErrorMsg>({name: '', email: '', message: ''})
 
     const updateFormState = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
         setFormState (
@@ -32,8 +42,47 @@ export const ContactForm = () => {
         console.log(formState)
     }
 
+    const validateForm = (): boolean => {
+        let isFormValid = true;
+        setIsNameError(false);
+        setIsEmailError(false);
+        setIsMessageError(false);
+
+        if (!formState?.name?.trim()) {
+            isFormValid = false;
+            setIsNameError(true);
+            setErrorMsg(prevState => ({...prevState, name: "Please, enter your name."}))
+        }
+        if ((formState?.name?.trim().length ?? 0) > 100) {
+            isFormValid = false;
+            setIsNameError(true);
+            setErrorMsg(prevState => ({...prevState, name: "Please, enter a shorter name."}))
+        }
+        if ((formState?.email?.trim().length ?? 0) > 255) {
+            isFormValid = false;
+            setIsEmailError(true);
+            setErrorMsg(prevState => ({...prevState, email: "Please, enter a shorter email."}))
+        }
+        if ((formState?.email?.trim().length ?? 0) > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formState?.email ?? '')) {
+            isFormValid = false;
+            setIsEmailError(true);
+            setErrorMsg(prevState => ({...prevState, email: "Please, enter a valid email."}))
+        }
+        if (!formState?.message?.trim()) {
+            isFormValid = false;
+            setIsMessageError(true);
+            setErrorMsg(prevState => ({...prevState, message: "Please, enter your message."}))
+        }
+        if ((formState?.message?.trim().length ?? 0) > 5000) {
+            isFormValid = false;
+            setIsMessageError(true);
+            setErrorMsg(prevState => ({...prevState, message: "Please, enter a shorter message."}))
+        }
+        return isFormValid;
+    }
+
     const submitRequest = () => {
-        if (!formState) return;
+        if (!validateForm() || !formState) return;
         setIsFormSending(true);
         contactApi.submit(formState).then(() => {
             setIsFormSending(false);
@@ -51,12 +100,16 @@ export const ContactForm = () => {
                 <Fieldset.Root size="lg">
                     <Fieldset.Content>
 
-                        <Field.Root>
+                        <Field.Root invalid={isNameError}>
                             <Field.Label>Name</Field.Label>
                             <Input name="name" onChange={updateFormState}/>
+                            <Field.ErrorText width="full">
+                                <Field.ErrorIcon h={3}/>
+                                {errorMsg.name}
+                            </Field.ErrorText>
                         </Field.Root>
 
-                        <Field.Root>
+                        <Field.Root invalid={isEmailError}>
                             <Field.Label>Email
                                 <Field.RequiredIndicator
                                     fallback={
@@ -67,11 +120,19 @@ export const ContactForm = () => {
                                 />
                             </Field.Label>
                             <Input name="email" type="email" onChange={updateFormState} />
+                            <Field.ErrorText width="full">
+                                <Field.ErrorIcon h={3}/>
+                                {errorMsg.email}
+                            </Field.ErrorText>
                         </Field.Root>
 
-                        <Field.Root>
+                        <Field.Root invalid={isMessageError}>
                             <Field.Label>Your message</Field.Label>
                             <Textarea variant="outline" name="message" placeholder="Your message..." onChange={updateFormState}/>
+                            <Field.ErrorText width="full">
+                                <Field.ErrorIcon h={3}/>
+                                {errorMsg.message}
+                            </Field.ErrorText>
                         </Field.Root>
                     </Fieldset.Content>
 

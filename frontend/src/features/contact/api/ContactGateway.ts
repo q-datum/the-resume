@@ -88,7 +88,6 @@ export class ContactGateway {
                 throw new Error("Email is too long.");
             }
 
-            // Light client-side validation; backend remains source of truth
             const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
             if (!emailOk) {
                 throw new Error("Email format is invalid.");
