@@ -14,7 +14,7 @@ export const PrivacyPolicyBanner = ({onAccept}: IPrivacyPolicyBanner) => {
     return (
         <Container w="100vw">
             <Box
-                w="100vw"
+                w={{base: "100vh", lg: "100vw"}}
                 h="100vh"
                 position="fixed"
                 top="0"

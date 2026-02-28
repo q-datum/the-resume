@@ -1,48 +1,207 @@
 import {HeroSection} from "@/components/HeroSection/HeroSection.tsx";
-import {Container, SimpleGrid, GridItem, Highlight, Card, Button, Image} from "@chakra-ui/react";
+import {
+    Container,
+    SimpleGrid,
+    GridItem,
+    Highlight,
+    Card,
+    Button,
+    Image,
+    useBreakpointValue, Heading,
+    Timeline,
+    Text,
+    Box,
+    Blockquote, For, Center, Flex
+} from "@chakra-ui/react";
 import sampleChatImg from "@/assets/images/sample-chat.png";
+import myPhoto from "@/assets/images/my-photo.jpg";
+import cvutLogo from "@/assets/images/logo_CVUT.svg"
+import {useNavigate} from "react-router-dom";
+import {FaDiceD20, FaSuitcase} from "react-icons/fa";
+import {SiCommerzbank} from "react-icons/si";
+import type {ReactNode} from "react";
+import {SkillsBlock} from "@/components/ui/SkillsBlock.tsx";
+
+type ExperienceNode = {
+    title: string;
+    period: string;
+    icon: ReactNode;
+    description: ReactNode;
+}
+
+const experiences: ExperienceNode[] = [
+    {
+        title: "Frontend Developer, Dungeons LAB",
+        period: "Feb 2025 – present",
+        icon: <FaDiceD20 />,
+        description:
+            <Text textStyle="md">
+                Personal project with a partner, focused on <strong>Foundry VTT </strong>
+                plugins using React + TypeScript. Leading development of <strong>Dungeons LAB </strong>
+                plugins.
+            </Text>
+    },
+    {
+        title: "Frontend Developer, Commerzbank",
+        period: "Feb 2023 – Feb 2025",
+        icon: <SiCommerzbank />,
+        description:
+            <Text textStyle="md">
+                I was working on an <strong>online banking app</strong> as a Frontend Developer. My work
+                was mainly focused on <strong>TypeScript, React and Jest</strong>. Additionally,
+                I was leading the development of a small internal project.
+            </Text>
+    },
+    {
+        title: "Python Developer, Kvadro Plus",
+        period: "Jan 2022 – Dec 2022",
+        icon: <FaSuitcase />,
+        description:
+            <Text textStyle="md">
+                I was working on the <strong>stock market</strong> parsing application
+                based on <strong>Pandas</strong> and <strong>YFinance</strong>.
+            </Text>
+    },
+    {
+        title: "Web Developer, ABC Studio",
+        period: "Aug 2020 – Dec 2021",
+        icon: <FaSuitcase />,
+        description:
+            <Text textStyle="md">
+                I developed and maintained the website for a local language school. It featured
+                a <strong>booking system</strong>, <strong>admin panel</strong> and a <strong>landing page </strong>. The application
+                was based on <strong>JQuery</strong>, <strong>PHP</strong>, and <strong>PostgreSQL</strong>
+            </Text>
+    },
+]
 
 export const HomePage = () => {
+    const secondaryButtonHref = useBreakpointValue<string>({
+        base: '/chat',
+        md: '/projects'
+    }) ?? '/chat';
+
+    const navigate = useNavigate();
+
     return (
 
         <Container py={10}>
             <SimpleGrid
                 columns={{base: 1, md: 2, lg: 3}}
+                gridTemplateRows="auto"
                 gap={6}
             >
-                <GridItem rowSpan={2} colSpan={{base: 1, lg: 2}}>
+                <GridItem rowSpan={{base: 2, md: 1}} colSpan={{base: 1, lg: 2}}>
                     <HeroSection
                         border = {false}
                         title = {
                             <Highlight query={"I am Alexander"} styles={{ color: "purple.fg" }}>Hello, I am Alexander</Highlight>
                         }
                         subtitle = {
-                            <Highlight query={["web developer", "React", "TypeScript", "Java Spring Boot"]} styles={{ color: "purple.fg" }}>
-                                An experienced web developer specializing in building modern web applications based on React,
-                                TypeScript, and Java Spring Boot.
-                            </Highlight>
+                            <Box>
+                                <Highlight query={["frontend", "full-stack developer", "React", "TypeScript", "Java Spring Boot"]} styles={{ color: "purple.fg" }}>
+                                    An experienced frontend / full-stack developer specializing in building modern web applications based on React,
+                                    TypeScript, and Java Spring Boot.
+                                </Highlight>
+                                <br/><br/>
+                                Prague • Open to remote
+                            </Box>
                         }
-                        primaryButtonText="My Skills"
-                        onPrimaryButtonClick={() => window.location.href = "/skills"}
-                        secondaryButtonText="My Projects"
-                        onSecondaryButtonClick={() => window.location.href = "/projects"}
+                        primaryButtonText="Download CV"
+                        onPrimaryButtonClick={() => navigate('/cv')}
+                        secondaryButtonText={useBreakpointValue({base: "AI Chat", md: "Projects"})}
+                        onSecondaryButtonClick={() => navigate(secondaryButtonHref)}
                     />
                 </GridItem>
 
-                <GridItem rowSpan={2} colSpan={1}>
+                <GridItem display="flex" flexDirection="column" justifyContent="end">
+                    <Flex direction="row" justify="end">
+                        <Image
+                            rounded={{base: "2xl", md: "full"}}
+                            fit="cover"
+                            w={{base: '100%', md: "250px"}}
+                            h={{base: '100wv', md: "250px"}}
+                            src={myPhoto}
+                            alt="Alexander's Photo"
+                        />
+                    </Flex>
+                </GridItem>
 
-                    <Card.Root>
-                        <Image src={sampleChatImg} alt="Sample Chat" />
-                        <Card.Body>
-                            <Card.Title>AI-Powered Chat</Card.Title>
-                            <Card.Description>Ask anything in the GPT-powered chat about my background, education, experience, and projects.</Card.Description>
-                        </Card.Body>
-                        <Card.Footer gap="2">
-                            <Button variant="solid">Start chat</Button>
-                            <Button variant="ghost">How it works</Button>
-                        </Card.Footer>
-                    </Card.Root>
+                <GridItem colSpan={{base: 1, md: 2, lg: 3}}>
+                    <SkillsBlock />
+                </GridItem>
 
+                <GridItem colSpan={{base: 1, lg: 2}}>
+                    <Heading size="4xl" fontWeight="bold">My Experience</Heading>
+                    <Timeline.Root size="xl" mt={10} maxW="600px">
+                        <For each={experiences}>
+                            {(experience, index) => (
+                                <Timeline.Item key={index}>
+                                    <Timeline.Connector>
+                                        <Timeline.Separator />
+                                        <Timeline.Indicator>
+                                            {experience.icon}
+                                        </Timeline.Indicator>
+                                    </Timeline.Connector>
+                                    <Timeline.Content>
+                                        <Timeline.Title fontSize="lg" fontWeight="bold">{experience.title}</Timeline.Title>
+                                        <Timeline.Description fontSize="sm" color="purple.fg">{experience.period}</Timeline.Description>
+                                        {experience.description}
+                                    </Timeline.Content>
+                                </Timeline.Item>
+                            )}
+                        </For>
+                    </Timeline.Root>
+                </GridItem>
+
+                {useBreakpointValue({
+                    base: null,
+                    md:
+                        <GridItem colSpan={1} display="flex" alignItems="start">
+
+                            <Card.Root mt="4.75rem" overflow="hidden" variant={{_dark: "outline", _light: "elevated"}}>
+                                <Image src={sampleChatImg} alt="Sample Chat" />
+                                <Card.Body>
+                                    <Card.Title>AI-Powered Chat</Card.Title>
+                                    <Card.Description>Ask anything in the GPT-powered chat about my background, education, experience, and projects.</Card.Description>
+                                </Card.Body>
+                                <Card.Footer gap="2">
+                                    <Button variant="solid">Start chat</Button>
+                                    <Button variant="ghost">How it works</Button>
+                                </Card.Footer>
+                            </Card.Root>
+
+                        </GridItem>,
+                })}
+
+                <GridItem colSpan={{base: 1, md: 2, lg: 3}}>
+                    <Heading size="4xl" fontWeight="bold" mt={10}>Education</Heading>
+                    <Flex direction="row" mt={10} gap={{base: 8, md: 10}}>
+                        <Center>
+                            <Image
+                                src={cvutLogo}
+                                alt="cvut logo"
+                                fit="contain"
+                                height={28}
+                            />
+                        </Center>
+                        <Box>
+                            <Heading size={{base: "lg", md: "2xl"}} fontWeight="bold">Czech Technical University in Prague</Heading>
+                            <Text fontSize={{base: "md", md: "lg"}} fontWeight="semibold" >Faculty of Information Technology</Text>
+                            <Text color="fg.muted">Bachelor’s degree in Software Engineering - graduation in summer 2026</Text>
+                        </Box>
+
+                    </Flex>
+
+                </GridItem>
+
+                <GridItem colSpan={{base: 1, md: 2, lg: 3}}>
+                    <Heading size="4xl" fontWeight="bold" mt={10}>About</Heading>
+                    <Blockquote.Root mt={10} variant="solid" maxW={{base: "100%",md: "60%"}}>
+                        <Blockquote.Content fontSize="lg">
+                            I build reliable, maintainable applications with well-thought-out architecture and a focus on scalability and reuse. I enjoy improving developer experience through clean abstractions, testing, and automation. I stay curious and adopt new tools pragmatically — including AI-assisted workflows — when they help ship better software faster.
+                        </Blockquote.Content>
+                    </Blockquote.Root>
                 </GridItem>
 
             </SimpleGrid>
