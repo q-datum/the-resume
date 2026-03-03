@@ -1,4 +1,5 @@
 import { load } from "recaptcha-v3";
+import { Env } from "@/app/config/env";
 
 type Execable = { execute: (action: string) => Promise<string> };
 
@@ -22,8 +23,8 @@ export class GoogleRecaptchaV3Provider implements RecaptchaProvider {
     private readonly siteKey: string;
     private readonly opts: GoogleRecaptchaV3Options;
 
-    constructor(siteKey: string, opts?: GoogleRecaptchaV3Options) {
-        this.siteKey = siteKey;
+    constructor(opts?: GoogleRecaptchaV3Options) {
+        this.siteKey = Env.recaptchaSiteKey;
         this.opts = opts ?? {};
     }
 
