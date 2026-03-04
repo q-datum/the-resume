@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: the-resume-backend:prod
+    image: ghcr.io/q-datum/the-resume-backend:latest
     container_name: the_resume_backend
     environment:
       SPRING_R2DBC_URL: ${SPRING_R2DBC_URL}
@@ -39,7 +39,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: the-resume-nginx:prod
+    image: ghcr.io/q-datum/the-resume-nginx:latest
     container_name: the_resume_nginx
     depends_on: [backend]
     ports:
