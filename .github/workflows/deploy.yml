@@ -3,7 +3,7 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - "feature/ci**"
+      - "master"
 
 permissions:
   contents: read
