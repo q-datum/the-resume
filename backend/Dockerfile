@@ -4,8 +4,9 @@ WORKDIR /home/gradle/project
 
 COPY build.gradle* settings.gradle* gradle.properties* gradlew ./
 COPY gradle ./gradle
-COPY src ./src
+RUN chmod +x ./gradlew
 
+COPY src ./src
 RUN ./gradlew clean bootJar -x test
 
 # ---- runtime stage ----
