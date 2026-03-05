@@ -5,12 +5,7 @@ import {chatApi} from "@/app/wiring/chat";
 import {type Message, MessagesView} from "@/features/chat/components/MessagesView.tsx";
 import {ClearChatButton} from "@/features/chat/components/ClearChatButton.tsx";
 import {ChatUserInput} from "@/features/chat/components/ChatUserInput.tsx";
-
-const logIfDev = (msg: string, ...args: unknown[]) => {
-    if (import.meta.env.DEV) {
-        console.log(msg, ...args);
-    }
-}
+import {devLog} from "@/shared/utils/devUtils.ts";
 
 export const Chat = () => {
     const [messages, setMessages] = useState<Message[]>([
@@ -82,14 +77,14 @@ export const Chat = () => {
 
         setInput("");
 
-        logIfDev("[chat] stream start:", content);
+        devLog("[chat] stream start:", content);
         setIsStreaming(true);
         const obs = streamChat$(chatApi, content, { count: 3, baseMs: 300, capMs: 2500, jitter: true });
 
         // @ts-expect-error rxjs subscription at runtime
         subRef.current = obs.subscribe({
             next: (chunk) => {
-                logIfDev("[chat] chunk:", JSON.stringify(chunk));
+                devLog("[chat] chunk:", JSON.stringify(chunk));
                 setMessages((prev) =>
                     prev.map((m) => (m.id === assistantId ? {...m, content: m.content + chunk} : m))
                 );
@@ -99,7 +94,7 @@ export const Chat = () => {
                 setIsStreaming(false);
             },
             complete: () => {
-                logIfDev("[chat] stream complete");
+                devLog("[chat] stream complete");
                 setIsStreaming(false);
             },
         });

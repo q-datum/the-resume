@@ -17,6 +17,7 @@ import {contactApi} from "@/app/wiring/contact.ts";
 import type {ContactRequest} from "@/features/contact/api/ContactGateway.ts";
 import {type ChangeEvent, useState} from "react";
 import {RiArrowRightLine} from "react-icons/ri";
+import {devLog} from "@/shared/utils/devUtils.ts";
 
 type FormErrorMsg = {
     name: string;
@@ -39,7 +40,7 @@ export const ContactForm = () => {
                 {...prevState, [e.target.name]: e.target.value}
             )
         )
-        console.log(formState)
+        devLog(formState)
     }
 
     const validateForm = (): boolean => {
