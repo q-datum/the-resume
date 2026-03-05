@@ -8,7 +8,7 @@ import {
     IconButton,
     Drawer,
     Portal,
-    CloseButton, For, Center
+    CloseButton, For, Center, Link
 } from "@chakra-ui/react";
 import { FaGithub } from "react-icons/fa";
 import { CgMenu } from "react-icons/cg";
@@ -159,15 +159,15 @@ export const Header = ({navButtonLinks}: HeaderProps) => {
             paddingBottom={3}
             position="fixed"
             width="100%"
-            bg={{ _dark: "rgba(39 39 42, 1)", _light: "rgba(255, 255, 255, 0.3)" }}
+            bg={{ _dark: "rgba(21, 21, 24, .6)", _light: "rgba(255, 255, 255, 0.7)" }}
             backdropFilter="blur(45px)"
             zIndex={1000}
         >
             <Container>
                 <Flex justify="space-between">
                     <Center h={10}>
-                        <Text fontWeight="bold" textStyle={{base: "md", md: "lg"}}>
-                            Alexander Muryshkin
+                        <Text fontWeight="bold" textStyle="lg">
+                            <Link href="/">Alexander Muryshkin</Link>
                         </Text>
                     </Center>
                     <Flex

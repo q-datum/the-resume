@@ -14,7 +14,7 @@ export const PrivacyPolicyBanner = ({onAccept}: IPrivacyPolicyBanner) => {
     return (
         <Container w="100vw">
             <Box
-                w="100vw"
+                w={{base: "100vh", lg: "100vw"}}
                 h="100vh"
                 position="fixed"
                 top="0"
@@ -30,9 +30,9 @@ export const PrivacyPolicyBanner = ({onAccept}: IPrivacyPolicyBanner) => {
                     subtitle="Ask questions about my work, experience, or projects and receive intelligent, real-time responses. This chat processes your messages to generate answers. Please review and accept the Privacy Policy before continuing."
                     centerContent={true}
                     border={false}
-                    primaryButtonText="Accept"
+                    primaryButtonContent="Accept"
                     onPrimaryButtonClick={onAccept}
-                    secondaryButtonText="Privacy Policy"
+                    secondaryButtonContent="Privacy Policy"
                     onSecondaryButtonClick={() => navigate('/privacy')}
                 />
             </Center>
