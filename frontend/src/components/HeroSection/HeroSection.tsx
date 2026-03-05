@@ -6,10 +6,14 @@ interface HeroSectionProps {
     subtitle: string | ReactNode;
     centerContent?: boolean;
     border?: boolean;
-    primaryButtonText?: string;
+    primaryButtonContent?: string | ReactNode;
     onPrimaryButtonClick?: () => void;
-    secondaryButtonText?: string;
+    secondaryButtonContent?: string | ReactNode;
     onSecondaryButtonClick?: () => void;
+}
+
+function isString(x: unknown): x is string {
+    return typeof x === "string";
 }
 
 export const HeroSection = ({
@@ -17,16 +21,20 @@ export const HeroSection = ({
                                 subtitle,
                                 centerContent = false,
                                 border = true,
-                                primaryButtonText = "Get Started",
+                                primaryButtonContent = "Get Started",
                                 onPrimaryButtonClick = undefined,
-                                secondaryButtonText,
+                                secondaryButtonContent,
                                 onSecondaryButtonClick = undefined
 }: HeroSectionProps) => {
     const headingAlign = centerContent ? "center" : "left";
-    const areButtonsPassedCorrectly =  primaryButtonText &&
-                                                            secondaryButtonText &&
-                                                            onPrimaryButtonClick !== undefined &&
-                                                            onSecondaryButtonClick !== undefined;
+    const primaryIsElement = !isString(primaryButtonContent);
+    const secondaryIsElement = !isString(secondaryButtonContent);
+
+    const showButtons =
+        !!primaryButtonContent &&
+        !!secondaryButtonContent &&
+        (primaryIsElement || !!onPrimaryButtonClick) &&
+        (secondaryIsElement || !!onSecondaryButtonClick);
 
     return (
         <Container
@@ -60,24 +68,25 @@ export const HeroSection = ({
             </Heading>
 
             {
-                areButtonsPassedCorrectly
+                showButtons
                 ?
                 <ButtonGroup pt={{base: 10, lg: 16}} size="lg">
                     <Button
                         variant="solid"
                         colorPalette="gray"
                         rounded="xl"
-                        onClick={onPrimaryButtonClick}
+                        asChild={primaryIsElement}
                     >
-                        {primaryButtonText}
+                        {primaryButtonContent}
                     </Button>
                     <Button
                         variant="ghost"
                         colorPalette="purple"
                         rounded="xl"
                         onClick={onSecondaryButtonClick}
+                        asChild={secondaryIsElement}
                     >
-                        {secondaryButtonText}
+                        {secondaryButtonContent}
                     </Button>
                 </ButtonGroup>
                 :

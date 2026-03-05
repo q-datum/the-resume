@@ -83,6 +83,10 @@ export const HomePage = () => {
 
     const navigate = useNavigate();
 
+    const openGithubProfile = () => {
+        window.open("https://github.com/q-datum/the-resume", "_blank", "noopener,noreferrer");
+    }
+
     return (
 
         <Container py={10}>
@@ -107,9 +111,17 @@ export const HomePage = () => {
                                 Prague • Open to remote
                             </Box>
                         }
-                        primaryButtonText="Download CV"
-                        onPrimaryButtonClick={() => navigate('/cv')}
-                        secondaryButtonText={useBreakpointValue({base: "AI Chat", md: "Projects"})}
+                        primaryButtonContent={
+                            <a
+                                href="/cv/CV%20-%20Alexander%20Muryshkin%20(public).pdf"
+                                download="Alexander_Muryshkin_CV.pdf"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Download CV
+                            </a>
+                        }
+                        secondaryButtonContent={useBreakpointValue({base: "AI Chat", md: "Projects"})}
                         onSecondaryButtonClick={() => navigate(secondaryButtonHref)}
                     />
                 </GridItem>
@@ -166,8 +178,8 @@ export const HomePage = () => {
                                     <Card.Description>Ask anything in the GPT-powered chat about my background, education, experience, and projects.</Card.Description>
                                 </Card.Body>
                                 <Card.Footer gap="2">
-                                    <Button variant="solid">Start chat</Button>
-                                    <Button variant="ghost">How it works</Button>
+                                    <Button variant="solid" onClick={() => navigate('/chat')}>Start chat</Button>
+                                    <Button variant="ghost" onClick={openGithubProfile}>How it works</Button>
                                 </Card.Footer>
                             </Card.Root>
 
