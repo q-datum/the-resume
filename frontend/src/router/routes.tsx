@@ -5,6 +5,7 @@ import { ContactPage } from '@/pages/ContactPage';
 import {ChatPage} from "@/pages/ChatPage.tsx";
 import {MainLayout} from "@/layout/MainLayout.tsx";
 import {PrivacyPolicyPage} from "@/pages/PrivacyPolicyPage.tsx";
+import {NotFoundPage} from "@/pages/NotFoundPage.tsx";
 
 export const router = createBrowserRouter([
     {
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
             { path: '/contact', element: <ContactPage /> },
             { path: '/chat', element: <ChatPage /> },
             { path: '/privacy', element: <PrivacyPolicyPage /> },
+            { path: '*', element: <NotFoundPage /> }
         ],
     },
 ]);
