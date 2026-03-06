@@ -49,9 +49,7 @@ export class ChatGateway {
                     await this.renewTokenOnce();
                     await run();
                 } else {
-                    // unexpected → follow your temporary policy
                     console.error("[chat] unexpected error", err);
-                    //this.abortSession();
                     throw err;
                 }
             }
@@ -94,7 +92,7 @@ export class ChatGateway {
     async tryGetHistory(): Promise<ChatMessage[]> {
         const sid = this.store.getSessionId();
         const tok = this.store.getToken();
-        if (!sid || !tok) return []; // scenario A: nothing to load yet
+        if (!sid || !tok) return [];
 
         const fetchHistory = async (): Promise<ChatMessage[]> => {
             const headers = this.auth.attachAuth();
@@ -104,21 +102,16 @@ export class ChatGateway {
         try {
             return await fetchHistory();
         } catch (err) {
-            // New rule: if /history says token is bad/expired → /renew → retry /history once.
             if (this.isTokenError(err)) {
                 try {
-                    await this.renewTokenOnce(); // single-flight guarded
+                    await this.renewTokenOnce();
                 } catch (renewErr) {
-                    // Per your request: JUST LOG the /renew failure, keep storage intact, and don't throw.
-                    // Returning empty history lets the UI continue; streaming will attempt its own renew later.
                     console.error("[chat] /renew failed after /history 401:", renewErr);
                     return [];
                 }
-                // Retry history once after a successful renew.
                 return fetchHistory();
             }
 
-            // Unexpected error: keep storage, log, and bubble up.
             console.error("[chat] /history unexpected error:", err);
             throw err;
         }
@@ -178,7 +171,6 @@ export class ChatGateway {
                     },
                     onError: (err) => {
                         if (renewingInStream && err instanceof DOMException && err.name === "AbortError") return;
-                        //this.abortSession();
                         console.error("[chat] unexpected error", err);
                         onError?.(err);
                     },
@@ -188,7 +180,6 @@ export class ChatGateway {
                     },
                 });
             } catch (err) {
-                // Connect-phase token error → /renew once → restart once
                 if (attempt === "initial" && this.isTokenError(err) && !userSignal.aborted) {
                     try {
                         await this.renewTokenOnce();
@@ -196,13 +187,11 @@ export class ChatGateway {
                         return;
                     } catch (e) {
                         console.error("[chat] unexpected error", err);
-                        //this.abortSession();
                         onError?.(e);
                         return;
                     }
                 }
                 console.error("[chat] unexpected error", err);
-                //this.abortSession();
                 onError?.(err);
             }
         };

@@ -1,7 +1,8 @@
-import {Box, Flex, Text, Spinner, Clipboard, IconButton} from "@chakra-ui/react";
+import {Box, Flex, Text, Spinner, Clipboard, IconButton, Center} from "@chakra-ui/react";
 import {Prose} from "@/components/ui/prose.tsx";
 import Markdown from "react-markdown";
 import remarkGfm from 'remark-gfm'
+import {useEffect, useRef} from "react";
 
 export interface Message {
     id: string;
@@ -43,8 +44,10 @@ const AssistantMessage = ({ content }: { content: string }) => (
 
         <Clipboard.Root value={content} style={{ marginTop: 12 }}>
             <Clipboard.Trigger asChild>
-                <IconButton variant="surface" size="xs" borderRadius="full" aria-label="Copy to clipboard">
-                    <Clipboard.Indicator />
+                <IconButton variant="surface" size="xs" borderRadius="full" aria-label="Copy to clipboard" ml="1px">
+                    <Center>
+                        <Clipboard.Indicator />
+                    </Center>
                 </IconButton>
             </Clipboard.Trigger>
         </Clipboard.Root>
@@ -52,13 +55,33 @@ const AssistantMessage = ({ content }: { content: string }) => (
 );
 
 export const MessagesView = ({ messages }: { messages: Message[] }) => {
+    const latestAssistantRef = useRef<HTMLDivElement | null>(null);
+
+    const latestAssistantMessageId = [...messages]
+        .reverse()
+        .find((msg) => msg.role === "assistant")?.id;
+
+    useEffect(() => {
+        if (!latestAssistantMessageId) return;
+
+        latestAssistantRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+        });
+    }, [latestAssistantMessageId]);
+
     return (
         <Box pt={{ base: "4", md: "6", lg: "10" }}>
             {messages.map((msg) =>
                 msg.role === "user" ? (
                     <UserMessage key={msg.id} content={msg.content} />
                 ) : (
-                    <AssistantMessage key={msg.id} content={msg.content} />
+                    <div
+                        key={msg.id}
+                        ref={msg.id === latestAssistantMessageId ? latestAssistantRef : null}
+                    >
+                        <AssistantMessage content={msg.content} />
+                    </div>
                 )
             )}
         </Box>
