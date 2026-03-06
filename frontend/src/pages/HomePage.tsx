@@ -11,7 +11,7 @@ import {
     Timeline,
     Text,
     Box,
-    Blockquote, For, Center, Flex
+    Blockquote, For, Center, Flex, Link
 } from "@chakra-ui/react";
 import sampleChatImg from "@/assets/images/sample-chat.png";
 import myPhoto from "@/assets/images/my-photo.jpg";
@@ -36,9 +36,13 @@ const experiences: ExperienceNode[] = [
         icon: <FaDiceD20 />,
         description:
             <Text textStyle="md">
-                Personal project with a partner, focused on <strong>Foundry VTT </strong>
-                plugins using React + TypeScript. Leading development of <strong>Dungeons LAB </strong>
-                plugins.
+                Built and maintained <strong>Dungeons LAB HUB</strong> using <strong>TypeScript</strong>,
+                <strong>React</strong>, and <strong>Sass</strong> — an in-game hub for managing our
+                released macros, modules, and content.
+                Shipped QoL macros that streamline common player / DM
+                workflows and reduce repetitive manual steps
+                for a <Link color="purple.fg" href="https://www.patreon.com/cw/Dungeons_LAB">Patreon</Link>-supported
+                community of 3,000+ members.
             </Text>
     },
     {
@@ -46,11 +50,23 @@ const experiences: ExperienceNode[] = [
         period: "Feb 2023 – Feb 2025",
         icon: <SiCommerzbank />,
         description:
-            <Text textStyle="md">
-                I was working on an <strong>online banking app</strong> as a Frontend Developer. My work
-                was mainly focused on <strong>TypeScript, React and Jest</strong>. Additionally,
-                I was leading the development of a small internal project.
-            </Text>
+            <Box>
+                <Text textStyle="md">
+                    Built and maintained <strong>Transaction Overview</strong> features for
+                    an <strong>online banking</strong> web app using <strong>React</strong>,
+                    <strong>TypeScript</strong>, and  <strong>Sass</strong>;
+                </Text>
+                <Text textStyle="md">
+                    Implemented reusable UI components and expanded
+                    automated tests with <strong>Jest</strong>, reducing local test execution
+                    time by up to ~50%;
+                </Text>
+                <Text textStyle="md">
+                    Led development of an internal employee directory
+                    (“Book of Faces”) used by ~200 employees, improving
+                    discoverability and onboarding;
+                </Text>
+            </Box>
     },
     {
         title: "Python Developer, Kvadro Plus",
@@ -58,8 +74,9 @@ const experiences: ExperienceNode[] = [
         icon: <FaSuitcase />,
         description:
             <Text textStyle="md">
-                I was working on the <strong>stock market</strong> parsing application
-                based on <strong>Pandas</strong> and <strong>YFinance</strong>.
+                Built a stock-market data parsing pipeline using <strong>Python</strong>,
+                <strong>Pandas</strong>, and <strong>yfinance</strong>, producing structured datasets for
+                analysis.
             </Text>
     },
     {
@@ -68,7 +85,7 @@ const experiences: ExperienceNode[] = [
         icon: <FaSuitcase />,
         description:
             <Text textStyle="md">
-                I developed and maintained the website for a local language school. It featured
+                Developed and maintained the website for a local language school featuring
                 a <strong>booking system</strong>, <strong>admin panel</strong> and a <strong>landing page </strong>. The application
                 was based on <strong>JQuery</strong>, <strong>PHP</strong>, and <strong>PostgreSQL</strong>
             </Text>

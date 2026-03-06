@@ -20,11 +20,13 @@ import {useLocation, Link as RouterLink} from 'react-router-dom';
 type NavigationButtonGroupProps = {
     navButtonLinks: INavLink[];
     orientation?: "vertical" | "horizontal";
+    setIsDrawerOpen?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const NavigationButtonGroup = ({
                                    navButtonLinks,
                                    orientation="horizontal",
+                                   setIsDrawerOpen,
 }: NavigationButtonGroupProps) => {
 
     const location = useLocation();
@@ -37,6 +39,7 @@ const NavigationButtonGroup = ({
                         <Button
                             key={index}
                             variant={location.pathname === link.path ? 'surface' : 'ghost'}
+                            onClick={() => setIsDrawerOpen ? setIsDrawerOpen(false) : null}
                         >
                             {link.label}
                         </Button>
@@ -70,7 +73,7 @@ const NavigationButtonGroup = ({
 type MenuDrawerProps = {
     navButtonLinks: INavLink[];
     isOpen: boolean;
-    setIsOpen: (e: boolean) => void;
+    setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const MenuDrawer = ({navButtonLinks, isOpen, setIsOpen}: MenuDrawerProps) => {
@@ -87,7 +90,11 @@ const MenuDrawer = ({navButtonLinks, isOpen, setIsOpen}: MenuDrawerProps) => {
                     <Drawer.Content rounded="2xl" bottom={-4}>
                         <Drawer.Body>
                             <Box padding={[6, 2, 2, 6]}>
-                                <NavigationButtonGroup navButtonLinks={navButtonLinks} orientation={"vertical"}/>
+                                <NavigationButtonGroup
+                                    navButtonLinks={navButtonLinks}
+                                    orientation={"vertical"}
+                                    setIsDrawerOpen={setIsOpen}
+                                />
                             </Box>
                         </Drawer.Body>
                         <Drawer.CloseTrigger asChild>
@@ -176,7 +183,7 @@ export const Header = ({navButtonLinks}: HeaderProps) => {
                         align="center"
                         justify="space-between"
                     >
-                        <NavigationButtonGroup navButtonLinks={navButtonLinks} />
+                        <NavigationButtonGroup navButtonLinks={navButtonLinks}/>
                         <NavigationIconButtonGroup navButtonLinks={navButtonLinks} />
                     </Flex>
                     <Box

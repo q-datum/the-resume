@@ -76,6 +76,7 @@ export const HeroSection = ({
                         colorPalette="gray"
                         rounded="xl"
                         asChild={primaryIsElement}
+                        onClick={primaryIsElement ? undefined : onPrimaryButtonClick}
                     >
                         {primaryButtonContent}
                     </Button>
@@ -83,8 +84,8 @@ export const HeroSection = ({
                         variant="ghost"
                         colorPalette="purple"
                         rounded="xl"
-                        onClick={onSecondaryButtonClick}
                         asChild={secondaryIsElement}
+                        onClick={secondaryIsElement ? undefined : onSecondaryButtonClick}
                     >
                         {secondaryButtonContent}
                     </Button>

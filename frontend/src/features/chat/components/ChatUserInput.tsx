@@ -6,10 +6,17 @@ type ChatUserInputProps = {
     value: string;
     onChange: (v: string) => void;
     onSubmit: () => void;
+    isHistoryLoading?: boolean;
     isStreaming?: boolean;
 };
 
-export const ChatUserInput = ({ value, onChange, onSubmit, isStreaming }: ChatUserInputProps) => {
+export const ChatUserInput = ({
+                                  value,
+                                  onChange,
+                                  onSubmit,
+                                  isStreaming,
+                                  isHistoryLoading,
+                              }: ChatUserInputProps) => {
     const handleSubmit = useCallback(
         (e: React.FormEvent) => {
             e.preventDefault();
@@ -58,7 +65,15 @@ export const ChatUserInput = ({ value, onChange, onSubmit, isStreaming }: ChatUs
                         onChange={(e) => onChange(e.target.value)}
                     />
                     <Center>
-                        <Button size="lg" rounded="full" type="submit" disabled={isStreaming}>
+                        <Button
+                            size="lg"
+                            rounded="full"
+                            type="submit"
+                            disabled={isStreaming}
+                            loading={isHistoryLoading}
+                            loadingText="Loading"
+                            spinnerPlacement="start"
+                        >
                             {sendButtonLabel}
                             <IoSend />
                         </Button>
